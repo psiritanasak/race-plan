@@ -311,11 +311,14 @@ function parseGPX(text){
   let nodes = Array.from(doc.getElementsByTagNameNS('*','trkpt'));
   if (!nodes.length) nodes = Array.from(doc.getElementsByTagNameNS('*','rtept'));
   if (nodes.length < 2) throw new Error('No track points found. Export the GPX as a track from your planning app.');
-  const nameEl = doc.getElementsByTagNameNS('*','name')[0];
+  // Prefer the track's own name over e.g. <metadata><author><name>.
+  const names = Array.from(doc.getElementsByTagNameNS('*','name'));
+  const nameEl = ['trk', 'rte', 'metadata'].map(p => names.find(n => n.parentNode && n.parentNode.localName === p)).find(Boolean);
   const raw = nodes.map(n => {
     const e = n.getElementsByTagNameNS('*','ele')[0];
     return [parseFloat(n.getAttribute('lat')), parseFloat(n.getAttribute('lon')), e ? parseFloat(e.textContent) : NaN];
   }).filter(p => isFinite(p[0]) && isFinite(p[1]));
+  if (raw.length < 2) throw new Error('No track points found. Export the GPX as a track from your planning app.');
   const hasEle = raw.some(p => isFinite(p[2]));
   let last = (raw.find(p => isFinite(p[2])) || [0,0,0])[2];
   raw.forEach(p => { if (isFinite(p[2])) last = p[2]; else p[2] = last; });
@@ -407,7 +410,7 @@ function parsePlan(text){
   });
   const rts = Array.from(t.matchAll(/race\s*time\s*(\d+:\d{2})/gi)).map(x => dur(x[1]));
   rts.forEach((v, k) => { if (cps[k]) cps[k].raceMin = v; });
-  const carbs = Array.from(t.matchAll(/(?:^|[\s,])(\d{1,4})\s?g\b(?!\s*carbs)/gim)).map(x => +x[1]);
+  const carbs = Array.from(t.matchAll(/(?:^|[\s,])(\d{1,4})\s?g\b(?!\s*(?:carbs|\/\s*h|per\s+h))/gim)).map(x => +x[1]);
   const fuel = Array.from(t.matchAll(/(\d+)\s*flasks?\s*,?\s*(\d+)\s*mg\s*sodium/gi)).map(x => [+x[1], +x[2]]);
   if (segs.length){
     if (carbs.length < segs.length) out.warnings.push(`Found ${carbs.length} carb amounts for ${segs.length} legs. Check the carbs column.`);
@@ -621,9 +624,11 @@ function renderReview(){
   const box = $('#review');
   if (!race.stops.length){ box.innerHTML = ''; return; }
   const d = derive();
+  const bad = d.filter((s, i) => i > 0 && s.raceMin != null && d[i - 1].raceMin != null && s.raceMin <= d[i - 1].raceMin);
+  const order = bad.length ? `<p class="status err">${bad.map(s => esc(s.name)).join(', ')} ${bad.length === 1 ? 'arrives' : 'arrive'} no later than the checkpoint before. Check the km and arrival times.</p>` : '';
   const fld = (i, k, label, val, ph, extra) => `<label class="f"><span>${label}</span><input data-i="${i}" data-k="${k}" value="${esc(val ?? '')}" ${ph != null ? `placeholder="${esc(ph)}"` : ''} ${extra || ''}></label>`;
   box.innerHTML = `<h3>Check your checkpoints</h3>
-    <p class="hint">Fix anything the text reader got wrong. Fuel is what you carry for the leg that ends at this checkpoint. Empty fuel boxes are estimated from your per-hour targets.</p>` +
+    <p class="hint">Fix anything the text reader got wrong. Fuel is what you carry for the leg that ends at this checkpoint. Empty fuel boxes are estimated from your per-hour targets.</p>${order}` +
     race.stops.map((s, i) => `<div class="rv">
       <span class="blaze">${i + 1}</span>
       <div class="nm">${fld(i, 'name', 'Name', s.name, null, 'autocomplete="off"')}</div>
@@ -638,14 +643,21 @@ function renderReview(){
     </div>`).join('') +
     `<div class="row"><button class="btn ghost" id="btnAdd">Add checkpoint</button><button class="btn" data-go="course">View course</button></div>`;
 }
-function rerenderReviewKeepFocus(){
+function rerenderReviewKeepFocus(row){
   const a = document.activeElement, key = a && a.dataset ? [a.dataset.i, a.dataset.k] : null;
+  if (key && row != null) key[0] = row;
   renderReview();
   if (key && key[0] != null){ const el = $(`#review input[data-i="${key[0]}"][data-k="${key[1]}"]`); if (el) el.focus(); }
 }
+// Store every stop's time as a fixed race time and clock, so removing or re-ordering stops can't shift the others.
+function pinTimes(){
+  const d = derive();
+  race.stops.forEach((s, k) => { if (d[k].raceMin != null){ s.raceMin = d[k].raceMin; s.arrive = d[k].clock; } });
+}
+// Changing one arrival moves every later stop by the same amount (each later leg keeps its length).
 function editArrive(i, val){
   const d = derive();
-  race.stops.forEach((s, k) => { s.legMin = d[k].leg; delete s.raceMin; });
+  race.stops.forEach((s, k) => { s.legMin = d[k].leg; delete s.raceMin; if (k > i) s.arrive = null; });
   const prev = i === 0 ? toMin(race.start) : toMin(d[i - 1].clock), a = toMin(val);
   if (a != null && prev != null) race.stops[i].legMin = (a - prev + 1440) % 1440;
   race.stops[i].arrive = val || null;
@@ -830,7 +842,17 @@ function buildIcs(base, rems, calName){
       'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(txt), 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT');
   });
   L.push('END:VCALENDAR');
-  return L.join('\r\n');
+  return L.map(icsFold).join('\r\n');
+}
+// RFC 5545: lines longer than 75 octets are folded, continuation lines start with a space.
+function icsFold(line){
+  const enc = new TextEncoder(); let out = '', cur = '', n = 0;
+  for (const ch of line){
+    const b = enc.encode(ch).length;
+    if (n + b > 75){ out += cur + '\r\n '; cur = ''; n = 1; }
+    cur += ch; n += b;
+  }
+  return out + cur;
 }
 function downloadFile(name, text){
   const u = URL.createObjectURL(new Blob([text], { type:'text/calendar' }));
@@ -931,12 +953,13 @@ function onFix(p){
   const prev = live && live.gps && live.gps.km != null ? live.gps.km : (pos && pos.km != null ? pos.km : 0);
   const limit = Math.max(80, c.accuracy * 1.5);
   let m = matchRoute(R, fix, prev - 1, prev + 6);
-  if (m.dist > limit){ if (++offCount >= 3){ const g = matchRoute(R, fix, 0, R.total); if (g.dist <= limit){ m = g; offCount = 0; } } } else offCount = 0;
+  let jumped = false;
+  if (m.dist > limit){ if (++offCount >= 3){ const g = matchRoute(R, fix, 0, R.total); if (g.dist <= limit){ m = g; offCount = 0; jumped = true; } } } else offCount = 0;
   const off = m.dist > limit;
   pos = Object.assign(fix, { km: off ? prev : m.km, off, dist:m.dist });
   gpsMsg = '';
   if (live && !off){
-    const newCp = markPassed(prev, m.km, fix.t);
+    const newCp = markPassed(prev, m.km, fix.t, jumped);
     live.gps = { km:m.km, t:fix.t };
     if (newCp || Date.now() - lastLiveSave > 15000){ saveLive(); lastLiveSave = Date.now(); }
     if (newCp && !$('#race').hidden) return renderLive();
@@ -944,13 +967,21 @@ function onFix(p){
   updGps();
   if (!$('#course').hidden && Date.now() - lastDraw > 3000){ lastDraw = Date.now(); drawProfile(); drawOutline(); }
 }
-function markPassed(fromKm, toKm, t){
+// After a GPS jump (late start, or a re-match far along the course) we don't know when the
+// skipped checkpoints were passed, so they are marked passed with no time (-1).
+// Only one right at the new position gets the current time.
+const CP_NO_TIME = -1;
+function markPassed(fromKm, toKm, t, jumped){
   const R = route(), sc = scaleOf(R); let any = false;
   if (!live.cps) live.cps = {};
-  if (toKm - fromKm > 20) return false;
-  race.stops.forEach((s, i) => { const k = s.km * sc; if (!live.cps[i] && k > fromKm - 0.05 && k <= toKm + 0.05){ live.cps[i] = t; any = true; } });
+  race.stops.forEach((s, i) => {
+    const k = s.km * sc;
+    if (live.cps[i] || k <= fromKm - 0.05 || k > toKm + 0.05) return;
+    live.cps[i] = jumped && k < toKm - 0.3 ? CP_NO_TIME : t; any = true;
+  });
   return any;
 }
+const cpTimed = v => v != null && v !== CP_NO_TIME;
 const deltaText = m => Math.abs(m) < 1 ? 'On plan' : `${Math.abs(m) >= 60 ? fmtDur(Math.abs(m)) : Math.round(Math.abs(m)) + ' min'} ${m > 0 ? 'behind' : 'ahead of'} plan`;
 function gpsAge(){
   if (!pos) return '';
@@ -963,7 +994,7 @@ function crsPosText(){
 }
 function cpDelta(){
   const d = derive(), c = (live && live.cps) || {}; let li = -1;
-  Object.keys(c).forEach(k => { if (+k > li) li = +k; });
+  Object.keys(c).forEach(k => { if (cpTimed(c[k]) && +k > li) li = +k; });
   if (li < 0 || !d[li] || d[li].raceMin == null) return null;
   return { name:d[li].name, delta:(c[li] - live.startedAt) / 60000 - d[li].raceMin };
 }
@@ -1004,7 +1035,8 @@ function splitsHTML(stMin){
   const rows = d.map((s, i) => {
     const plan = s.raceMin != null ? fmtClock(stMin + s.raceMin) : '--:--';
     let act = '';
-    if (c[i]){
+    if (c[i] === CP_NO_TIME) act = '<span class="q">passed</span>';
+    else if (c[i]){
       const t = new Date(c[i]), dl = s.raceMin != null ? (c[i] - live.startedAt) / 60000 - s.raceMin : null;
       act = fmtClock(t.getHours() * 60 + t.getMinutes()) + (dl != null ? ` <span class="q">${Math.abs(dl) < 1 ? '±0' : (dl > 0 ? '+' : '−') + Math.round(Math.abs(dl))}</span>` : '');
     } else if (i === nextI) act = `<button class="btn ghost sm" data-act="mark" data-i="${i}">I’m here</button>`;
@@ -1046,7 +1078,7 @@ document.addEventListener('click', e => {
   if (!t) return;
   if (t.dataset.tab) return showTab(t.dataset.tab);
   if (t.dataset.go) return showTab(t.dataset.go);
-  if (t.dataset.del != null){ race.stops.splice(+t.dataset.del, 1); save(); renderReview(); renderHeader(); return; }
+  if (t.dataset.del != null){ pinTimes(); race.stops.splice(+t.dataset.del, 1); save(); renderReview(); renderHeader(); return; }
   if (t.id === 'btnAdd'){
     const last = race.stops[race.stops.length - 1];
     race.stops.push({ name:'New checkpoint', km: last ? +(last.km + 1).toFixed(1) : 1, arrive:null, legMin:null, carbs:null, flasks:null, sodium:null, gain:null, loss:null });
@@ -1086,8 +1118,8 @@ $('#review').addEventListener('change', e => {
   if (k === 'name') s.name = v || s.name;
   else if (k === 'km'){
     const n = parseFloat(v.replace(',', '.'));
-    if (isFinite(n) && n >= 0){ s.km = n; race.stops.sort((a, b) => a.km - b.km); }
-    rerenderReviewKeepFocus();
+    if (isFinite(n) && n >= 0){ pinTimes(); s.km = n; race.stops.sort((a, b) => a.km - b.km); }
+    rerenderReviewKeepFocus(race.stops.indexOf(s));
   }
   else if (k === 'arrive'){ editArrive(i, v); rerenderReviewKeepFocus(); }
   else { const n = parseInt(v, 10); s[k] = isFinite(n) && n >= 0 ? n : null; }
