@@ -1,0 +1,1222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Race plan">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#17211C">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Trail race planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#E6EBE4; --surface:#F6F8F3; --surface-2:#ECF0E8; --ink:#14201A; --muted:#55625A; --faint:#7C877F;
+  --line:#C8D1C6; --route:#2E5B4B; --route-fill:rgba(46,91,75,.17); --on-route:#F6F8F3;
+  --blaze:#E5B000; --blaze-ink:#1C1A0E; --warn:#9C431C;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F1613; --surface:#17211C; --surface-2:#1F2B25; --ink:#E4EBE5; --muted:#9AAAA0; --faint:#73827A;
+    --line:#2D3B34; --route:#7CC2A4; --route-fill:rgba(124,194,164,.16); --on-route:#0F1613;
+    --blaze:#F3C632; --blaze-ink:#1C1A0E; --warn:#F0905F;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F1613; --surface:#17211C; --surface-2:#1F2B25; --ink:#E4EBE5; --muted:#9AAAA0; --faint:#73827A;
+  --line:#2D3B34; --route:#7CC2A4; --route-fill:rgba(124,194,164,.16); --on-route:#0F1613;
+  --blaze:#F3C632; --blaze-ink:#1C1A0E; --warn:#F0905F;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.45 "Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 56px}
+.cond{font-family:"Barlow Condensed","Arial Narrow","Helvetica Neue",sans-serif}
+p{margin:0}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blaze);outline-offset:2px}
+
+/* header */
+.top .app{color:var(--muted);font-weight:500;font-size:15px}
+.top h1{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:clamp(40px,11vw,64px);line-height:.95;letter-spacing:-.005em;margin:6px 0 8px;overflow-wrap:anywhere}
+.top .meta{color:var(--muted);font-size:16px}
+.tabs{display:flex;gap:4px;margin:20px 0 18px;border-bottom:1px solid var(--line)}
+.tabs button{appearance:none;background:none;border:0;padding:10px 14px 9px;font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-size:21px;font-weight:600;color:var(--muted);border-bottom:4px solid transparent;margin-bottom:-1px;cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--blaze)}
+
+/* panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.panel h2{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:24px;margin:0 0 10px;line-height:1.1}
+.panel h3{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:21px;margin:18px 0 4px}
+.hint{color:var(--muted);font-size:15px;max-width:62ch}
+.note{color:var(--muted)}
+.note strong{color:var(--ink);font-weight:600}
+
+/* blaze marker */
+.blaze{display:inline-grid;place-items:center;min-width:28px;height:21px;padding:0 4px;border-radius:2px;background:var(--blaze);color:var(--blaze-ink);font:700 15px/1 "Barlow Condensed","Arial Narrow",sans-serif}
+.blaze.ring{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+
+/* profile */
+.readout{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-size:20px;font-weight:600;min-height:26px;margin-bottom:6px}
+.readout .q{color:var(--muted);font-weight:500}
+.profile svg,#outline svg{display:block;width:100%;height:auto}
+.profile svg{touch-action:pan-y;cursor:crosshair}
+.scale{margin-top:10px;font-size:14px;color:var(--muted)}
+.stats{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:12px}
+.stats div{display:flex;flex-direction:column}
+.stats b{font:600 24px/1.05 "Barlow Condensed","Arial Narrow",sans-serif}
+.stats span{color:var(--muted);font-size:14px}
+
+/* checkpoint list */
+.stops{list-style:none;margin:0;padding:0}
+.stop{display:grid;grid-template-columns:34px 1fr auto;gap:2px 12px;padding:13px 0;border-top:1px solid var(--line)}
+.stop:first-child{border-top:0;padding-top:4px}
+.stop .blaze{margin-top:3px}
+.stop .nm{font:600 22px/1.1 "Barlow Condensed","Arial Narrow",sans-serif}
+.stop .sub{color:var(--muted);font-size:14.5px}
+.stop .sub.faint{color:var(--faint)}
+.stop .when{text-align:right}
+.stop .clock{font:700 28px/1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
+.carry{margin-top:7px;font-size:15px;padding:7px 10px;background:var(--surface-2);border-radius:8px;border-left:3px solid var(--route)}
+.carry span{color:var(--muted)}
+.carry em{color:var(--muted);font-style:normal}
+.totals{border-top:2px solid var(--ink);margin-top:6px;padding-top:12px;font-size:15px;color:var(--muted)}
+.totals b{color:var(--ink);font-weight:600}
+
+/* forms */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px}
+.f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.f>span{font-size:13.5px;color:var(--muted)}
+input,textarea{width:100%;min-width:0;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:16px}
+input[type="time"]{min-height:42px}
+textarea{min-height:170px;resize:vertical;font-size:15px;line-height:1.4}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+.btn{appearance:none;border:0;border-radius:10px;padding:11px 16px;background:var(--route);color:var(--on-route);font-weight:600;font-size:16px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn.danger{background:transparent;color:var(--warn);box-shadow:inset 0 0 0 1.5px currentColor}
+.file{position:relative;display:inline-block}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.status{margin-top:10px;font-size:15px}
+.status.err{color:var(--warn)}
+.steps{margin:8px 0 10px;padding-left:20px;color:var(--muted);font-size:15px}
+.steps li{margin:2px 0}
+
+/* review */
+.rv{display:grid;grid-template-columns:30px 1.5fr 1fr 1.2fr;gap:8px;padding:12px 0;border-top:1px solid var(--line);align-items:end}
+.rv .blaze{align-self:center;min-width:26px}
+.rv .fuel{grid-column:2 / -1;display:grid;grid-template-columns:1fr 1fr 1fr 40px;gap:8px;align-items:end}
+.x{appearance:none;border:0;background:none;color:var(--muted);font-size:24px;line-height:1;height:42px;width:40px;border-radius:8px;cursor:pointer}
+.x:hover{background:var(--surface-2)}
+.empty{text-align:left;padding:22px 16px}
+.empty p{color:var(--muted);margin:6px 0 14px;max-width:46ch}
+.saved{font-size:13.5px;color:var(--faint);margin-top:18px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.big{font-size:21px;padding:16px 22px;width:100%;font-family:"Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.01em}
+.tabs button[data-due]:not([data-due=""])::after{content:attr(data-due);display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:6px;padding:0 5px;border-radius:2px;background:var(--blaze);color:var(--blaze-ink);font-size:14px;vertical-align:2px}
+.live-clock{font:700 clamp(60px,19vw,104px)/.9 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin:2px 0 8px}
+.live .sub{color:var(--muted);font-size:15px;margin-top:4px}
+.next-what{font:600 27px/1.15 "Barlow Condensed","Arial Narrow",sans-serif;margin:2px 0 4px}
+.countdown{font:600 22px/1.2 "Barlow Condensed","Arial Narrow",sans-serif;color:var(--muted);font-variant-numeric:tabular-nums}
+.panel.due{background:var(--blaze);color:var(--blaze-ink);border-color:transparent}
+.panel.due .hint{color:var(--blaze-ink);opacity:.75}
+.panel.due .btn{background:var(--blaze-ink);color:var(--blaze);min-width:110px}
+.panel.due .btn.ghost{background:transparent;color:var(--blaze-ink);box-shadow:inset 0 0 0 2px var(--blaze-ink)}
+.prog{display:grid;gap:12px;margin-bottom:6px}
+.prog .lbl{display:flex;justify-content:space-between;font-size:15px;margin-bottom:4px}
+.prog .lbl b{font-weight:600}
+.bar{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--route);border-radius:4px}
+.chk{display:flex;gap:10px;align-items:center;margin-top:12px;font-size:15.5px}
+.chk input{width:22px;height:22px;accent-color:var(--route);flex:none}
+.sched details{border-top:1px solid var(--line);padding:10px 0}
+.sched details:first-of-type{border-top:0}
+.sched summary{cursor:pointer;font:600 20px/1.2 "Barlow Condensed","Arial Narrow",sans-serif}
+.sched summary .q{color:var(--muted);font-weight:500}
+.sched ol{list-style:none;margin:8px 0 2px;padding:0}
+.sched li{display:grid;grid-template-columns:50px 46px 1fr;gap:8px;padding:5px 0;font-size:15px;border-top:1px dashed var(--line)}
+.sched li .t{font:600 17px/1.2 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
+.sched li .rt{color:var(--muted);font-variant-numeric:tabular-nums}
+.pace{font:700 34px/1.05 "Barlow Condensed","Arial Narrow",sans-serif;margin:2px 0 6px}
+#lvGps .sub{color:var(--muted);font-size:15px;margin-top:3px}
+#lvGps .sub.faint{color:var(--faint);font-size:14px}
+.offc{margin-top:10px;padding:9px 11px;border-radius:8px;box-shadow:inset 0 0 0 2px var(--warn);color:var(--warn);font-weight:600}
+.btn.sm{padding:6px 11px;font-size:14.5px;border-radius:8px}
+.splits{list-style:none;margin:8px 0 0;padding:0}
+.splits li{display:grid;grid-template-columns:34px 1fr 50px 104px;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:15px}
+.splits li.hd{border-top:0;color:var(--muted);font-size:13.5px;padding:0 0 4px}
+.splits .nm{font:600 19px/1.1 "Barlow Condensed","Arial Narrow",sans-serif}
+.splits .pl,.splits .ac{font-variant-numeric:tabular-nums}
+.splits .ac{text-align:right}
+.splits .q{color:var(--muted);font-size:14px}
+#crsPos{flex:1 1 140px}
+[hidden]{display:none!important}
+@media (max-width:420px){
+  .rv{grid-template-columns:28px 1fr 1fr}
+  .rv .nm{grid-column:2 / -1}
+  .rv .fuel{grid-column:1 / -1;grid-template-columns:1fr 1fr 1fr 40px}
+  .rv .blaze{grid-row:1}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <p class="app">Trail race planner</p>
+    <h1 id="raceName">Your race</h1>
+    <p class="meta" id="raceMeta">Add a GPX file and your race plan to get started.</p>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-race" data-tab="race" aria-selected="false">Race</button>
+      <button role="tab" id="tab-course" data-tab="course" aria-selected="true">Course</button>
+      <button role="tab" id="tab-fuel" data-tab="fuel" aria-selected="false">Fuel</button>
+      <button role="tab" id="tab-setup" data-tab="setup" aria-selected="false">Setup</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="course" role="tabpanel" aria-labelledby="tab-course">
+      <div id="courseBody"></div>
+    </section>
+
+    <section id="race" role="tabpanel" aria-labelledby="tab-race" hidden>
+      <div id="liveBox"></div>
+    </section>
+
+    <section id="fuel" role="tabpanel" aria-labelledby="tab-fuel" hidden>
+      <div class="panel">
+        <h2>Reminders</h2>
+        <p class="hint">Amounts follow your plan for each leg, so a slow climb gets the same carbs per hour as a fast flat. Leave a box empty to turn that reminder off.</p>
+        <div class="grid3" style="margin-top:10px">
+          <label class="f"><span>Carbs every (min)</span><input id="rCarbs" inputmode="numeric" placeholder="Off"></label>
+          <label class="f"><span>Sodium every (min)</span><input id="rSodium" inputmode="numeric" placeholder="Off"></label>
+          <label class="f"><span>Fluid every (min)</span><input id="rDrink" inputmode="numeric" placeholder="Off"></label>
+        </div>
+        <label class="chk"><input type="checkbox" id="rCp"> At each checkpoint, remind me what to pack for the next leg</label>
+        <label class="chk"><input type="checkbox" id="rSound"> Play a sound when a reminder is due</label>
+        <p class="status" id="rSummary"></p>
+      </div>
+      <div class="panel">
+        <h2>Calendar alerts</h2>
+        <p class="hint">Calendar alerts go off even when your phone is locked or this app is closed. Add them at the start line so the times match your real start.</p>
+        <div class="grid2" style="margin-top:10px">
+          <label class="f"><span>Race date</span><input id="cDate" type="date"></label>
+          <label class="f"><span>Start time</span><input id="cStart" type="time"></label>
+        </div>
+        <label class="chk"><input type="checkbox" id="cDrink"> Include fluid reminders</label>
+        <div class="row">
+          <button class="btn" data-act="ics" id="btnIcs">Add to Calendar</button>
+          <button class="btn ghost" data-act="now">Start time is now</button>
+          <button class="btn ghost" data-act="test" id="btnTest">Test alert in 2 min</button>
+        </div>
+        <p class="status" id="icsStatus"></p>
+      </div>
+      <div class="panel sched"><h2>Full schedule</h2><div id="schedList"></div></div>
+    </section>
+
+    <section id="setup" role="tabpanel" aria-labelledby="tab-setup" hidden>
+      <div class="panel">
+        <h2>Race</h2>
+        <div class="grid2">
+          <label class="f"><span>Race name</span><input id="inName" autocomplete="off"></label>
+          <label class="f"><span>Start time</span><input id="inStart" type="time"></label>
+        </div>
+        <p class="hint" style="margin-bottom:8px">Fuel per hour, used for reminders and to estimate any leg without fuel numbers.</p>
+        <div class="grid3">
+          <label class="f"><span>Carbs g/h</span><input id="inCarbs" inputmode="numeric"></label>
+          <label class="f"><span>Fluid ml/h</span><input id="inFluid" inputmode="numeric"></label>
+          <label class="f"><span>Sodium mg/h</span><input id="inSodium" inputmode="numeric"></label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Course file</h2>
+        <p class="hint">The GPX gives the app the real route, so it can draw the profile now and follow your GPS position later.</p>
+        <div class="row">
+          <label class="file btn"><span id="gpxBtnLabel">Choose GPX file</span><input id="inGpx" type="file" aria-label="Choose GPX file"></label>
+        </div>
+        <p class="status" id="gpxStatus"></p>
+      </div>
+
+      <div class="panel">
+        <h2>Race plan</h2>
+        <p class="hint">Copy the text from your plan screenshots and paste it here. You can paste the fuel plan and the checkpoint plan together.</p>
+        <ol class="steps">
+          <li>Open the screenshot in Photos.</li>
+          <li>Press and hold on the text, then tap Select All and Copy.</li>
+          <li>Paste below, then do the same for the second screenshot.</li>
+        </ol>
+        <label class="f"><span>Plan text</span><textarea id="inPlan" placeholder="Start to A1&#10;km 0.00 to 12.5, 2:30, arrive 07:29&#10;150 g&#10;3 flasks, 1000 mg sodium&#10;…"></textarea></label>
+        <div class="row">
+          <button class="btn" id="btnParse">Read plan</button>
+          <button class="btn ghost" id="btnSample">Fill with PST100 sample</button>
+        </div>
+        <p class="status" id="planStatus"></p>
+        <div id="review"></div>
+      </div>
+
+      <div class="row" style="margin-top:4px">
+        <button class="btn danger" id="btnClear">Remove race from this phone</button>
+      </div>
+      <p class="saved" id="saveNote">Your race is saved on this phone only.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+'use strict';
+const KEY = 'trailplan:race:v1';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+const fmtN = n => Math.round(n).toLocaleString('en-US');
+const toMin = s => { const m = /^(\d{1,2})[:.](\d{2})/.exec(String(s||'').trim()); return m ? (+m[1])*60 + (+m[2]) : null; };
+const fmtClock = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m/60)) + ':' + pad(m % 60); };
+const fmtDur = m => { m = Math.round(m); return Math.floor(m/60) + ':' + pad(m % 60); };
+
+function blank(){ return { name:'', start:'05:00', targets:{carbs:60, fluid:500, sodium:400}, stops:[], route:null }; }
+function load(){
+  try { const r = localStorage.getItem(KEY); if (!r) return null; const o = JSON.parse(r); return Object.assign(blank(), o); }
+  catch(e){ return null; }
+}
+let race = load() || blank();
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(race)); $('#saveNote').textContent = 'Your race is saved on this phone only.'; }
+  catch(e){ $('#saveNote').textContent = 'Couldn’t save to this phone (storage is full or blocked). Your race stays until you close this page.'; }
+}
+
+/* ---------- GPX ---------- */
+function hav(a, b){
+  const R = 6371.0088, toR = Math.PI/180;
+  const dLat = (b[0]-a[0])*toR, dLon = (b[1]-a[1])*toR;
+  const s = Math.sin(dLat/2)**2 + Math.cos(a[0]*toR)*Math.cos(b[0]*toR)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.min(1, Math.sqrt(s)));
+}
+function parseGPX(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('This file isn’t a readable GPX file.');
+  let nodes = Array.from(doc.getElementsByTagNameNS('*','trkpt'));
+  if (!nodes.length) nodes = Array.from(doc.getElementsByTagNameNS('*','rtept'));
+  if (nodes.length < 2) throw new Error('No track points found. Export the GPX as a track from your planning app.');
+  const nameEl = doc.getElementsByTagNameNS('*','name')[0];
+  const raw = nodes.map(n => {
+    const e = n.getElementsByTagNameNS('*','ele')[0];
+    return [parseFloat(n.getAttribute('lat')), parseFloat(n.getAttribute('lon')), e ? parseFloat(e.textContent) : NaN];
+  }).filter(p => isFinite(p[0]) && isFinite(p[1]));
+  const hasEle = raw.some(p => isFinite(p[2]));
+  let last = (raw.find(p => isFinite(p[2])) || [0,0,0])[2];
+  raw.forEach(p => { if (isFinite(p[2])) last = p[2]; else p[2] = last; });
+  let d = 0, kept = 0;
+  const pts = [[0, +raw[0][2].toFixed(1), +raw[0][0].toFixed(5), +raw[0][1].toFixed(5)]];
+  for (let i = 1; i < raw.length; i++){
+    d += hav(raw[i-1], raw[i]);
+    if (d - kept >= 0.01 || i === raw.length - 1){
+      pts.push([+d.toFixed(4), +raw[i][2].toFixed(1), +raw[i][0].toFixed(5), +raw[i][1].toFixed(5)]);
+      kept = d;
+    }
+  }
+  return { name: nameEl ? nameEl.textContent.trim() : '', pts, hasEle };
+}
+let RC = null, RCsrc = null;
+function route(){
+  if (!race.route || !race.route.pts || race.route.pts.length < 2) return null;
+  if (RCsrc === race.route) return RC;
+  const p = race.route.pts, n = p.length;
+  const cg = new Float64Array(n), cl = new Float64Array(n);
+  let ref = p[0][1], g = 0, l = 0, minE = Infinity, maxE = -Infinity;
+  const T = 4;
+  for (let i = 0; i < n; i++){
+    const e = p[i][1];
+    if (e < minE) minE = e; if (e > maxE) maxE = e;
+    if (i){ const diff = e - ref; if (diff >= T){ g += diff; ref = e; } else if (diff <= -T){ l -= diff; ref = e; } }
+    cg[i] = g; cl[i] = l;
+  }
+  RC = { pts:p, cg, cl, total:p[n-1][0], gain:g, loss:l, minE, maxE, hasEle:race.route.hasEle };
+  RCsrc = race.route;
+  return RC;
+}
+function idxAt(R, km){
+  let lo = 0, hi = R.pts.length - 1;
+  if (km <= 0) return 0; if (km >= R.total) return hi;
+  while (lo < hi){ const mid = (lo + hi) >> 1; if (R.pts[mid][0] < km) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+function eleAt(R, km){
+  const i = idxAt(R, km); if (i === 0) return R.pts[0][1];
+  const a = R.pts[i-1], b = R.pts[i]; const t = (km - a[0]) / ((b[0] - a[0]) || 1);
+  return a[1] + (b[1] - a[1]) * Math.max(0, Math.min(1, t));
+}
+function between(R, a, b){ const ia = idxAt(R, a), ib = idxAt(R, b); return { gain: R.cg[ib] - R.cg[ia], loss: R.cl[ib] - R.cl[ia] }; }
+function isFinishName(n){ return /finish|end|arriv|ziel|fin\b/i.test(n || ''); }
+function scaleOf(R){
+  if (!R || !race.stops.length) return 1;
+  const last = race.stops[race.stops.length - 1];
+  if (!last.km) return 1;
+  if (isFinishName(last.name) || Math.abs(R.total / last.km - 1) < 0.03) return R.total / last.km;
+  return 1;
+}
+
+/* ---------- plan text parser ---------- */
+function parsePlan(text){
+  const t = String(text).replace(/[\u2212\u2013\u2014]/g,'-').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ');
+  const lines = t.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const num = s => parseFloat(String(s).replace(',', '.'));
+  const dur = s => { const m = /(\d+):(\d{2})/.exec(s); return m ? (+m[1])*60 + (+m[2]) : null; };
+  const clock = s => { const m = toMin(s); return m == null ? null : fmtClock(m); };
+  const out = { name:null, start:null, targets:null, stops:[], warnings:[] };
+  let m;
+  if ((m = /(\d+)\s*g\s*carbs?\s*,?\s*(\d+)\s*ml\s*(?:fluid|water)?\s*,?\s*(\d+)\s*mg\s*sodium/i.exec(t))) out.targets = { carbs:+m[1], fluid:+m[2], sodium:+m[3] };
+  if ((m = /start\s*,?\s*(\d{1,2}[:.]\d{2})/i.exec(t))) out.start = clock(m[1]);
+  const skip = /km\b|fuel plan|checkpoint plan|carbs|flask|sodium|race time|arrive|since last|predicted|powered|planner|^\d+([:.]\d+)?$/i;
+  const nl = lines.find(l => !skip.test(l) && l.length >= 2 && l.length <= 40 && !/\bto\b/i.test(l));
+  if (nl) out.name = nl;
+
+  const segRe = /km\s*(\d+(?:[.,]\d+)?)\s*to\s*(\d+(?:[.,]\d+)?)\s*,?\s*(\d+:\d{2})\s*,?\s*arrive\s*(\d{1,2}[:.]\d{2})/gi;
+  const cpRe = /km\s*(\d+(?:[.,]\d+)?)\s*,?\s*\+\s*(\d+)\s*\/\s*-\s*(\d+)\s*m/gi;
+  const toName = s => { const x = /(?:^|\s)([A-Za-z][\w]*)\s+to\s+([A-Za-z0-9][\w]*)\s*$/i.exec(s || ''); return x ? x[2] : null; };
+  const tailName = s => { const x = /([A-Za-z][A-Za-z0-9]{0,11})\s*$/.exec(s || ''); return x && !/^(km|m|last|time)$/i.test(x[1]) ? x[1] : null; };
+  const segs = [], cps = [];
+  lines.forEach((line, i) => {
+    let prevEnd = 0;
+    for (const x of line.matchAll(segRe)){
+      let to = toName(line.slice(prevEnd, x.index));
+      prevEnd = x.index + x[0].length;
+      if (!to && i > 0 && !/km\s*\d/i.test(lines[i-1])) to = toName(lines[i-1]);
+      segs.push({ to, km:num(x[2]), legMin:dur(x[3]), arrive:clock(x[4]) });
+    }
+    prevEnd = 0;
+    for (const x of line.matchAll(cpRe)){
+      let name = tailName(line.slice(prevEnd, x.index));
+      prevEnd = x.index + x[0].length;
+      if (!name && i > 0 && /^[A-Za-z][\w ]{0,15}$/.test(lines[i-1]) && !skip.test(lines[i-1])) name = lines[i-1];
+      cps.push({ name, km:num(x[1]), gain:+x[2], loss:+x[3] });
+    }
+  });
+  const rts = Array.from(t.matchAll(/race\s*time\s*(\d+:\d{2})/gi)).map(x => dur(x[1]));
+  rts.forEach((v, k) => { if (cps[k]) cps[k].raceMin = v; });
+  const carbs = Array.from(t.matchAll(/(?:^|[\s,])(\d{1,4})\s?g\b(?!\s*carbs)/gim)).map(x => +x[1]);
+  const fuel = Array.from(t.matchAll(/(\d+)\s*flasks?\s*,?\s*(\d+)\s*mg\s*sodium/gi)).map(x => [+x[1], +x[2]]);
+  if (segs.length){
+    if (carbs.length < segs.length) out.warnings.push(`Found ${carbs.length} carb amounts for ${segs.length} legs. Check the carbs column.`);
+    if (fuel.length < segs.length) out.warnings.push(`Found ${fuel.length} flask and sodium lines for ${segs.length} legs. Check those columns.`);
+  }
+  const stops = segs.map((s, k) => ({
+    name: s.to || '', km: s.km, arrive: s.arrive, legMin: s.legMin,
+    carbs: carbs[k] ?? null, flasks: fuel[k] ? fuel[k][0] : null, sodium: fuel[k] ? fuel[k][1] : null,
+    gain: null, loss: null
+  }));
+  cps.forEach(c => {
+    let st = stops.find(s => Math.abs(s.km - c.km) < 0.25);
+    if (!st){ st = { name:'', km:c.km, arrive:null, legMin:null, carbs:null, flasks:null, sodium:null, gain:null, loss:null }; stops.push(st); }
+    if (!st.name && c.name) st.name = c.name;
+    st.gain = c.gain; st.loss = c.loss;
+    if (c.raceMin != null) st.raceMin = c.raceMin;
+  });
+  stops.sort((a, b) => a.km - b.km);
+  stops.forEach((s, i) => { if (!s.name) s.name = (i === stops.length - 1 && segs.length) ? 'Finish' : 'CP ' + (i + 1); });
+  out.stops = stops;
+  out.counts = { segs:segs.length, cps:cps.length };
+  return out;
+}
+
+/* ---------- derived plan ---------- */
+function derive(){
+  const st = toMin(race.start) ?? 0;
+  let prevRace = 0, prevClock = st, prevKm = 0;
+  return race.stops.map(s => {
+    let rm = null;
+    if (s.raceMin != null) rm = s.raceMin;
+    else if (s.legMin != null && prevRace != null) rm = prevRace + s.legMin;
+    else { const a = toMin(s.arrive); if (a != null && prevRace != null) rm = prevRace + ((a - prevClock + 1440) % 1440); }
+    const leg = (rm != null && prevRace != null) ? rm - prevRace : null;
+    const clock = s.arrive || (rm != null ? fmtClock(st + rm) : null);
+    const t = race.targets;
+    const est = { carbs: s.carbs == null, flasks: s.flasks == null, sodium: s.sodium == null };
+    const carbs = s.carbs != null ? s.carbs : (leg != null ? Math.round(leg / 60 * t.carbs / 5) * 5 : null);
+    const flasks = s.flasks != null ? s.flasks : (leg != null ? Math.max(1, Math.ceil(leg / 60 * t.fluid / 500)) : null);
+    const sodium = s.sodium != null ? s.sodium : (leg != null ? Math.round(leg / 60 * t.sodium / 50) * 50 : null);
+    const out = Object.assign({}, s, { raceMin:rm, leg, clock, carbs, flasks, sodium, est, legKm: s.km - prevKm, anyEst: (est.carbs || est.flasks || est.sodium) && leg != null });
+    prevRace = rm; prevClock = clock ? toMin(clock) : prevClock; prevKm = s.km;
+    return out;
+  });
+}
+
+/* ---------- header ---------- */
+function renderHeader(){
+  $('#raceName').textContent = race.name || 'Your race';
+  const R = route(), d = derive(), bits = [];
+  if (race.start) bits.push('Start ' + race.start);
+  if (R) bits.push(R.total.toFixed(1) + ' km', '+' + fmtN(R.gain) + ' m');
+  else if (d.length) bits.push(d[d.length - 1].km.toFixed(1) + ' km');
+  const last = d[d.length - 1];
+  if (last && last.raceMin != null) bits.push('finish ' + last.clock + ' (' + fmtDur(last.raceMin) + ')');
+  $('#raceMeta').textContent = bits.length > 1 ? bits.join(', ') : 'Add a GPX file and your race plan to get started.';
+}
+
+/* ---------- course tab ---------- */
+function renderCourse(){
+  const R = route(), d = derive(), el = $('#courseBody');
+  if (!R && !d.length){
+    el.innerHTML = `<div class="panel empty"><h2>Nothing here yet</h2><p>Add the course GPX and paste your race plan. The app puts each checkpoint on the elevation profile and shows what to carry on every leg.</p><button class="btn" data-go="setup">Set up your race</button></div>`;
+    return;
+  }
+  const sc = scaleOf(R);
+  let html = '';
+  if (R){
+    let note = '';
+    const last = race.stops[race.stops.length - 1];
+    if (last && Math.abs(sc - 1) >= 0.002) note = `<p class="scale">Your GPX is ${R.total.toFixed(1)} km and the plan says ${last.km.toFixed(1)} km, so checkpoints are stretched by ×${sc.toFixed(3)} to land in the right place.</p>`;
+    else if (last && sc === 1 && Math.abs(R.total / last.km - 1) >= 0.03) note = `<p class="scale">The plan ends at km ${last.km.toFixed(1)} but the GPX is ${R.total.toFixed(1)} km. Checkpoints use the plan’s km as is.</p>`;
+    if (!R.hasEle) note += `<p class="scale">This GPX has no elevation data, so the profile is flat.</p>`;
+    html += `<div class="panel"><p class="readout" id="readout"><span class="q">Touch the profile to read km and elevation</span></p><div id="profile" class="profile"></div>${note}
+      <div class="stats"><div><b>${R.total.toFixed(1)} km</b><span>distance</span></div><div><b>+${fmtN(R.gain)} m</b><span>climb</span></div><div><b>−${fmtN(R.loss)} m</b><span>descent</span></div><div><b>${fmtN(R.maxE)} m</b><span>highest point</span></div></div>
+      <div class="row"><button class="btn ghost" data-act="locate">Show my position</button><span class="hint" id="crsPos">${esc(crsPosText())}</span></div></div>`;
+  } else {
+    html += `<div class="panel note"><strong>No course file yet.</strong> Add the GPX in Setup to see the elevation profile and place your checkpoints on the route.</div>`;
+  }
+  if (d.length) html += stopsHTML(d, R, sc);
+  else html += `<div class="panel note"><strong>No race plan yet.</strong> Paste the text from your plan screenshots in Setup to add checkpoints, arrival times and fuel.</div>`;
+  if (R) html += `<div class="panel"><h2>Course shape</h2><div id="outline"></div></div>`;
+  el.innerHTML = html;
+  if (R){ drawProfile(); drawOutline(); }
+}
+function carryHTML(leg){
+  if (!leg || (leg.carbs == null && leg.flasks == null && leg.sodium == null)) return '';
+  const f = leg.flasks;
+  return `<p class="carry"><span>Leave with</span> ${leg.carbs ?? '?'} g carbs, ${f ?? '?'} flask${f === 1 ? '' : 's'}, ${leg.sodium != null ? fmtN(leg.sodium) : '?'} mg sodium${leg.anyEst ? ' <em>(estimated)</em>' : ''}</p>`;
+}
+function stopsHTML(d, R, sc){
+  const rows = [`<li class="stop"><span class="blaze ring">S</span><div><p class="nm">Start</p><p class="sub">km 0</p>${carryHTML(d[0])}</div><div class="when"><p class="clock">${esc(race.start || '--:--')}</p><p class="sub">race time 0:00</p></div></li>`];
+  d.forEach((s, i) => {
+    let gl = s.gain != null ? `+${fmtN(s.gain)} / −${fmtN(s.loss)} m` : '';
+    let gpx = '';
+    if (R && R.hasEle){
+      const g = between(R, (i ? d[i-1].km : 0) * sc, s.km * sc);
+      const txt = `+${fmtN(g.gain)} / −${fmtN(g.loss)} m`;
+      if (gl) gpx = `GPX says ${txt}`; else gl = txt;
+    }
+    const sub = [`km ${s.km.toFixed(1)}`, `${s.legKm.toFixed(1)} km leg`];
+    if (gl) sub.push(gl);
+    rows.push(`<li class="stop"><span class="blaze">${i + 1}</span><div><p class="nm">${esc(s.name)}</p><p class="sub">${sub.join(', ')}</p>${gpx ? `<p class="sub faint">${gpx}</p>` : ''}${carryHTML(d[i + 1])}</div><div class="when"><p class="clock">${esc(s.clock || '--:--')}</p><p class="sub">${s.raceMin != null ? 'race time ' + fmtDur(s.raceMin) : ''}</p></div></li>`);
+  });
+  const sum = k => d.reduce((a, s) => a + (s[k] || 0), 0);
+  const last = d[d.length - 1];
+  const totals = `<p class="totals">Whole race: <b>${fmtN(sum('carbs'))} g carbs</b>, <b>${sum('flasks')} flasks</b>, <b>${fmtN(sum('sodium'))} mg sodium</b>${last.raceMin != null ? `. Finish <b>${last.clock}</b> after <b>${fmtDur(last.raceMin)}</b>` : ''}.</p>`;
+  return `<div class="panel"><h2>Checkpoints</h2><ol class="stops">${rows.join('')}</ol>${totals}</div>`;
+}
+
+function drawProfile(){
+  const R = route(), box = $('#profile'); if (!R || !box) return;
+  const W = Math.max(280, box.clientWidth), H = W < 500 ? 230 : 270;
+  const top = 58, bot = 24, L = 4, Rr = 4, ph = H - top - bot, pw = W - L - Rr;
+  const span = Math.max(60, R.maxE - R.minE), y0 = R.minE - span * 0.04, y1 = R.maxE + span * 0.06;
+  const X = km => L + km / R.total * pw, Y = e => top + (1 - (e - y0) / (y1 - y0)) * ph;
+  const p = R.pts, step = Math.max(1, Math.floor(p.length / (pw * 2)));
+  let line = '';
+  for (let i = 0; i < p.length; i += step) line += (i ? 'L' : 'M') + X(p[i][0]).toFixed(1) + ',' + Y(p[i][1]).toFixed(1);
+  line += 'L' + X(R.total).toFixed(1) + ',' + Y(p[p.length - 1][1]).toFixed(1);
+  const area = line + `L${X(R.total).toFixed(1)},${top + ph}L${L},${top + ph}Z`;
+  const steps = [5, 10, 20, 25, 50, 100]; let tk = steps.find(s => R.total / s <= 6) || 100;
+  let ticks = '';
+  for (let k = tk; k < R.total - tk * 0.4; k += tk) ticks += `<line x1="${X(k)}" x2="${X(k)}" y1="${top + ph}" y2="${top + ph + 4}" stroke="var(--faint)"/><text x="${X(k)}" y="${H - 5}" text-anchor="middle">${k}</text>`;
+  const sc = scaleOf(R), lanes = [-99, -99]; let marks = '';
+  race.stops.forEach((s, i) => {
+    const km = Math.min(R.total, s.km * sc), x = X(km), y = Y(eleAt(R, km));
+    let lane = x - lanes[0] >= 30 ? 0 : (x - lanes[1] >= 30 ? 1 : (lanes[0] < lanes[1] ? 0 : 1));
+    lanes[lane] = x;
+    const by = lane ? 30 : 6, label = String(i + 1), bw = label.length > 1 ? 26 : 22;
+    marks += `<line x1="${x}" x2="${x}" y1="${by + 20}" y2="${y}" stroke="var(--ink)" stroke-opacity=".35" stroke-dasharray="2 3"/>
+      <circle cx="${x}" cy="${y}" r="3.2" fill="var(--blaze)" stroke="var(--ink)" stroke-width="1.2"/>
+      <rect x="${x - bw / 2}" y="${by}" width="${bw}" height="20" rx="2" fill="var(--blaze)"/>
+      <text x="${x}" y="${by + 15}" text-anchor="middle" class="bn">${label}</text>`;
+  });
+  let you = '';
+  if (pos && pos.km != null){ const yx = X(pos.km), yy = Y(eleAt(R, pos.km)); you = `<line x1="${yx}" x2="${yx}" y1="${yy}" y2="${top + ph}" stroke="var(--route)" stroke-width="2"/><circle cx="${yx}" cy="${yy}" r="7.5" fill="var(--route)" stroke="var(--surface)" stroke-width="3"/>`; }
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Elevation profile with ${race.stops.length} checkpoints">
+    <style>text{font:500 12px "Barlow",system-ui,sans-serif;fill:var(--muted)} .bn{font:700 14px "Barlow Condensed","Arial Narrow",sans-serif;fill:var(--blaze-ink)} .el{font-weight:600;fill:var(--muted)}</style>
+    <path d="${area}" fill="var(--route-fill)"/>
+    <path d="${line}" fill="none" stroke="var(--route)" stroke-width="2" stroke-linejoin="round"/>
+    <line x1="${L}" x2="${W - Rr}" y1="${top + ph}" y2="${top + ph}" stroke="var(--line)"/>
+    <text x="${L}" y="${H - 5}">0</text><text x="${W - Rr}" y="${H - 5}" text-anchor="end">${R.total.toFixed(1)} km</text>
+    ${ticks}
+    <text x="${W - Rr}" y="${Y(R.maxE) - 6}" text-anchor="end" class="el">${fmtN(R.maxE)} m</text>
+    ${marks}
+    ${you}
+    <g id="cur" visibility="hidden"><line id="curL" y1="${top - 4}" y2="${top + ph}" stroke="var(--ink)" stroke-width="1"/><circle id="curC" r="4.5" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/></g>
+  </svg>`;
+  const svg = box.querySelector('svg'), cur = svg.querySelector('#cur'), cl = svg.querySelector('#curL'), cc = svg.querySelector('#curC');
+  const move = ev => {
+    const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * (W / r.width);
+    const km = Math.max(0, Math.min(R.total, (px - L) / pw * R.total)), e = eleAt(R, km), x = X(km);
+    cl.setAttribute('x1', x); cl.setAttribute('x2', x); cc.setAttribute('cx', x); cc.setAttribute('cy', Y(e)); cur.setAttribute('visibility', 'visible');
+    const ni = race.stops.findIndex(s => s.km * sc > km + 0.01);
+    const next = ni >= 0 ? `, next ${esc(race.stops[ni].name)} in ${(race.stops[ni].km * sc - km).toFixed(1)} km` : '';
+    $('#readout').innerHTML = `km ${km.toFixed(1)}, ${fmtN(e)} m<span class="q">${next}</span>`;
+  };
+  svg.addEventListener('pointermove', move);
+  svg.addEventListener('pointerdown', move);
+}
+
+function drawOutline(){
+  const R = route(), box = $('#outline'); if (!R || !box) return;
+  const W = Math.max(260, box.clientWidth), p = R.pts;
+  const lat0 = p.reduce((a, q) => a + q[2], 0) / p.length, k = Math.cos(lat0 * Math.PI / 180);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  p.forEach(q => { const x = q[3] * k, y = q[2]; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; });
+  const w = (maxX - minX) || 1e-6, h = (maxY - minY) || 1e-6, pad = 22;
+  const H = Math.round(Math.min(360, Math.max(180, (W - 2 * pad) * h / w + 2 * pad)));
+  const s = Math.min((W - 2 * pad) / w, (H - 2 * pad) / h), ox = (W - w * s) / 2, oy = (H - h * s) / 2;
+  const PX = q => ox + (q[3] * k - minX) * s, PY = q => oy + (maxY - q[2]) * s;
+  const step = Math.max(1, Math.floor(p.length / 1500));
+  let d = '';
+  for (let i = 0; i < p.length; i += step) d += (i ? 'L' : 'M') + PX(p[i]).toFixed(1) + ',' + PY(p[i]).toFixed(1);
+  const e = p[p.length - 1]; d += 'L' + PX(e).toFixed(1) + ',' + PY(e).toFixed(1);
+  const sc = scaleOf(R); let marks = '';
+  race.stops.forEach((st, i) => {
+    const q = p[idxAt(R, st.km * sc)], x = PX(q), y = PY(q), label = String(i + 1), bw = label.length > 1 ? 20 : 16;
+    marks += `<rect x="${x - bw / 2}" y="${y - 7}" width="${bw}" height="14" rx="2" fill="var(--blaze)" stroke="var(--surface)" stroke-width="1.5"/><text x="${x}" y="${y + 4.5}" text-anchor="middle">${label}</text>`;
+  });
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Map outline of the course">
+    <style>text{font:700 11px "Barlow Condensed","Arial Narrow",sans-serif;fill:var(--blaze-ink)}</style>
+    <path d="${d}" fill="none" stroke="var(--route)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${PX(p[0])}" cy="${PY(p[0])}" r="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.4"/>
+    ${marks}
+    ${pos ? `<circle cx="${PX([0, 0, pos.lat, pos.lon])}" cy="${PY([0, 0, pos.lat, pos.lon])}" r="8" fill="var(--route)" stroke="var(--surface)" stroke-width="3"/>` : ''}
+  </svg>`;
+}
+
+/* ---------- setup tab ---------- */
+function fillSetup(){
+  $('#inName').value = race.name || '';
+  $('#inStart').value = race.start || '';
+  $('#inCarbs').value = race.targets.carbs ?? '';
+  $('#inFluid').value = race.targets.fluid ?? '';
+  $('#inSodium').value = race.targets.sodium ?? '';
+  gpxStatus();
+  renderReview();
+}
+function gpxStatus(msg, err){
+  const el = $('#gpxStatus'), R = route();
+  el.classList.toggle('err', !!err);
+  if (msg){ el.textContent = msg; return; }
+  if (R){
+    el.textContent = `Loaded${race.route.file ? ' ' + race.route.file : ''}: ${R.total.toFixed(1)} km, +${fmtN(R.gain)} / −${fmtN(R.loss)} m.`;
+    $('#gpxBtnLabel').textContent = 'Replace GPX file';
+  } else { el.textContent = ''; $('#gpxBtnLabel').textContent = 'Choose GPX file'; }
+}
+function renderReview(){
+  const box = $('#review');
+  if (!race.stops.length){ box.innerHTML = ''; return; }
+  const d = derive();
+  const fld = (i, k, label, val, ph, extra) => `<label class="f"><span>${label}</span><input data-i="${i}" data-k="${k}" value="${esc(val ?? '')}" ${ph != null ? `placeholder="${esc(ph)}"` : ''} ${extra || ''}></label>`;
+  box.innerHTML = `<h3>Check your checkpoints</h3>
+    <p class="hint">Fix anything the text reader got wrong. Fuel is what you carry for the leg that ends at this checkpoint. Empty fuel boxes are estimated from your per-hour targets.</p>` +
+    race.stops.map((s, i) => `<div class="rv">
+      <span class="blaze">${i + 1}</span>
+      <div class="nm">${fld(i, 'name', 'Name', s.name, null, 'autocomplete="off"')}</div>
+      ${fld(i, 'km', 'km', s.km, null, 'inputmode="decimal"')}
+      ${fld(i, 'arrive', 'Arrive', d[i].clock, null, 'type="time"')}
+      <div class="fuel">
+        ${fld(i, 'carbs', 'Carbs g', s.carbs, d[i].carbs, 'inputmode="numeric"')}
+        ${fld(i, 'flasks', 'Flasks', s.flasks, d[i].flasks, 'inputmode="numeric"')}
+        ${fld(i, 'sodium', 'Sodium mg', s.sodium, d[i].sodium, 'inputmode="numeric"')}
+        <button class="x" data-del="${i}" aria-label="Remove ${esc(s.name)}">×</button>
+      </div>
+    </div>`).join('') +
+    `<div class="row"><button class="btn ghost" id="btnAdd">Add checkpoint</button><button class="btn" data-go="course">View course</button></div>`;
+}
+function rerenderReviewKeepFocus(){
+  const a = document.activeElement, key = a && a.dataset ? [a.dataset.i, a.dataset.k] : null;
+  renderReview();
+  if (key && key[0] != null){ const el = $(`#review input[data-i="${key[0]}"][data-k="${key[1]}"]`); if (el) el.focus(); }
+}
+function editArrive(i, val){
+  const d = derive();
+  race.stops.forEach((s, k) => { s.legMin = d[k].leg; delete s.raceMin; });
+  const prev = i === 0 ? toMin(race.start) : toMin(d[i - 1].clock), a = toMin(val);
+  if (a != null && prev != null) race.stops[i].legMin = (a - prev + 1440) % 1440;
+  race.stops[i].arrive = val || null;
+}
+
+/* ---------- fuel reminders ---------- */
+const LKEY = 'trailplan:live:v1';
+const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+const inClaude = !!window.claude;
+const isoDate = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+function remind(){ return Object.assign({ carbsEvery:30, sodiumEvery:60, drinkEvery:15, cp:true, sound:true }, race.remind || {}); }
+function legs(){
+  const d = derive(), out = []; let prev = 0, prevName = 'Start';
+  for (const s of d){
+    if (s.raceMin == null) break;
+    if (s.raceMin > prev) out.push({ from:prevName, to:s.name, a:prev, b:s.raceMin, carbs:s.carbs, sodium:s.sodium, flasks:s.flasks });
+    prev = s.raceMin; prevName = s.name;
+  }
+  return out;
+}
+function schedule(){
+  const r = remind(), t = race.targets, L = legs();
+  if (!L.length) return [];
+  const end = L[L.length - 1].b, map = new Map();
+  const legAt = m => L.find(l => m > l.a && m <= l.b) || L[L.length - 1];
+  const add = (m, it) => { m = Math.round(m); if (!map.has(m)) map.set(m, { id:m, min:m, items:[] }); map.get(m).items.push(it); };
+  const rate = (l, k, fb) => (l[k] != null && l.b > l.a) ? l[k] / ((l.b - l.a) / 60) : fb;
+  if (r.carbsEvery > 0) for (let m = r.carbsEvery; m < end; m += r.carbsEvery){ const l = legAt(m); add(m, { kind:'carbs', amount:Math.max(5, Math.round(rate(l, 'carbs', t.carbs) * r.carbsEvery / 60 / 5) * 5) }); }
+  if (r.sodiumEvery > 0) for (let m = r.sodiumEvery; m < end; m += r.sodiumEvery){ const l = legAt(m); add(m, { kind:'sodium', amount:Math.max(50, Math.round(rate(l, 'sodium', t.sodium) * r.sodiumEvery / 60 / 50) * 50) }); }
+  if (r.drinkEvery > 0) for (let m = r.drinkEvery; m < end; m += r.drinkEvery){ add(m, { kind:'drink', amount:Math.max(10, Math.round(t.fluid * r.drinkEvery / 60 / 10) * 10) }); }
+  if (r.cp) L.forEach((l, k) => { const nx = L[k + 1]; if (nx) add(l.b, { kind:'cp', name:l.to, next:nx }); });
+  const order = { cp:0, carbs:1, sodium:2, drink:3 };
+  return Array.from(map.values()).sort((a, b) => a.min - b.min).map(x => { x.items.sort((p, q) => order[p.kind] - order[q.kind]); return x; });
+}
+function remText(r){
+  const c = r.items.find(i => i.kind === 'cp');
+  const parts = r.items.filter(i => i.kind !== 'cp').map(i => i.kind === 'carbs' ? `${i.amount} g carbs` : i.kind === 'sodium' ? `${fmtN(i.amount)} mg sodium` : `${i.amount} ml fluid`);
+  let s = '';
+  if (c){ const n = c.next; s = `At ${c.name}, pack ${n.carbs ?? '?'} g carbs, ${n.flasks ?? '?'} flask${n.flasks === 1 ? '' : 's'} and ${n.sodium != null ? fmtN(n.sodium) : '?'} mg sodium for ${n.to}`; }
+  if (parts.length){
+    const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0];
+    s += (s ? '. Take ' : 'Take ') + list;
+  }
+  return s;
+}
+
+/* live race */
+function loadLive(){ try { const o = JSON.parse(localStorage.getItem(LKEY) || 'null'); return o && o.startedAt ? o : null; } catch(e){ return null; } }
+let live = loadLive();
+function saveLive(){ try { if (live) localStorage.setItem(LKEY, JSON.stringify(live)); else localStorage.removeItem(LKEY); } catch(e){} }
+const alerted = new Map();
+function startLive(at){ live = { startedAt:at, log:{}, order:[] }; const e0 = (Date.now() - at) / 60000; schedule().forEach(r => { if (r.min <= e0) live.log[r.id] = 'past'; }); live.gps = { km:0 }; live.cps = {}; alerted.clear(); saveLive(); unlockAudio(); keepAwake(); if (race.gpsOn !== false && route()) gpsStart(); renderLive(); window.scrollTo(0, 0); }
+function liveState(){
+  const S = schedule(), e = (Date.now() - live.startedAt) / 60000;
+  const due = S.filter(r => r.min <= e && !live.log[r.id]);
+  const next = S.find(r => r.min > e) || null;
+  const sums = { carbs:[0, 0], sodium:[0, 0], drink:[0, 0] };
+  S.forEach(r => { if (r.min > e || live.log[r.id] === 'past') return; r.items.forEach(i => { if (!sums[i.kind]) return; sums[i.kind][1] += i.amount; if (live.log[r.id] === 'done') sums[i.kind][0] += i.amount; }); });
+  return { S, e, due, next, sums };
+}
+const fmtHMS = m => { const t = Math.max(0, Math.floor(m * 60)); return Math.floor(t / 3600) + ':' + pad(Math.floor(t / 60) % 60) + ':' + pad(t % 60); };
+const fmtLeft = m => { const t = Math.max(0, Math.ceil(m * 60)); return t >= 3600 ? fmtHMS(t / 60) : Math.floor(t / 60) + ':' + pad(t % 60); };
+const agoText = m => m < 1 ? 'Due now' : `Due ${Math.floor(m)} min ago`;
+let liveKey = '';
+function renderLive(){
+  const box = $('#liveBox');
+  if (!live){
+    liveKey = ''; $('#tab-race').dataset.due = '';
+    if (!schedule().length && !route()){ box.innerHTML = `<div class="panel empty"><h2>Race day</h2><p>Add your course and race plan in Setup first. Reminders and pacing are built from them.</p><button class="btn" data-go="setup">Go to setup</button></div>`; return; }
+    box.innerHTML = `<div class="panel"><h2>Race day</h2>
+      <p class="hint">Start the timer at the gun. GPS tracking starts with it. If you start it late, earlier reminders are skipped. The app shows what to take and when, with a sound. Keep this screen open, since your phone can’t show these alerts while it’s locked. Add the Calendar alerts below as a backup.</p>
+      <div class="row"><button class="btn big" data-act="start">Start race now</button></div>
+      <div class="row"><label class="f" style="flex:1 1 160px"><span>Already started? Start time</span><input id="lvAt" type="time" value="${esc(race.start || '')}"></label><button class="btn ghost" data-act="startAt" style="align-self:flex-end">Start from this time</button></div>
+      <div class="row"><button class="btn ghost" data-act="sound">Test sound</button></div></div>`;
+    return;
+  }
+  const L = liveState(), st = new Date(live.startedAt), stMin = st.getHours() * 60 + st.getMinutes();
+  const legsL = legs(), nl = legsL.find(l => l.b > L.e);
+  const plan = nl ? `Plan: ${esc(nl.to)} at ${fmtClock(stMin + nl.b)}, in ${fmtDur(nl.b - L.e)}.` : 'Past the planned finish time.';
+  const bar = (k, label, unit) => { const [a, b] = L.sums[k]; if (!b) return ''; const pct = Math.min(100, Math.round(a / b * 100)); return `<div><p class="lbl"><span>${label}</span><b>${fmtN(a)} / ${fmtN(b)} ${unit}</b></p><div class="bar"><i style="width:${pct}%"></i></div></div>`; };
+  const d0 = L.due[0];
+  box.innerHTML = `<div class="panel live">
+      <p class="hint">Race time</p>
+      <p class="live-clock" id="lvClock">${fmtHMS(L.e)}</p>
+      <p class="sub">Started ${fmtClock(stMin)}. ${plan}</p>
+      <p class="sub" id="lvWake">${wakeText()}</p>
+    </div>
+    ${d0 ? `<div class="panel due" role="alert">
+      <p class="hint">${L.due.length > 1 ? `Now, ${L.due.length} waiting` : 'Now'}</p>
+      <p class="next-what">${esc(remText(d0))}</p>
+      <p class="hint" id="lvAgo">${agoText(L.e - d0.min)}</p>
+      <div class="row"><button class="btn" data-act="done" data-id="${d0.id}">Done</button><button class="btn ghost" data-act="skip" data-id="${d0.id}">Skip</button>${L.due.length > 1 ? '<button class="btn ghost" data-act="alldone">All done</button>' : ''}</div></div>` : ''}
+    <div class="panel" id="lvGps">${gpsInner()}</div>
+    ${L.next ? `<div class="panel"><p class="hint">Next at ${fmtClock(stMin + L.next.min)}</p><p class="next-what">${esc(remText(L.next))}</p><p class="countdown" id="lvNext">in ${fmtLeft(L.next.min - L.e)}</p></div>`
+             : `<div class="panel note">No more reminders. Bring it home.</div>`}
+    <div class="panel"><h2>Taken so far</h2><div class="prog">${bar('carbs', 'Carbs', 'g')}${bar('sodium', 'Sodium', 'mg')}${bar('drink', 'Fluid', 'ml')}</div>
+      ${!L.sums.carbs[1] && !L.sums.sodium[1] && !L.sums.drink[1] ? '<p class="note">Your first reminder hasn’t come up yet.</p>' : ''}
+      <div class="row"><button class="btn ghost" data-act="undo" ${live.order.length ? '' : 'disabled'}>Undo last</button><button class="btn danger" data-act="end">End race</button></div></div>
+    ${splitsHTML(stMin)}`;
+  liveKey = L.due.map(r => r.id).join(',') + '|' + (L.next ? L.next.id : '');
+  $('#tab-race').dataset.due = L.due.length || '';
+}
+function tick(){
+  if (!live) return;
+  const L = liveState(), key = L.due.map(r => r.id).join(',') + '|' + (L.next ? L.next.id : '');
+  const now = Date.now(); let ringNow = false;
+  L.due.forEach(r => { const a = alerted.get(r.id); if (!a){ alerted.set(r.id, { n:1, t:now }); ringNow = true; } else if (a.n < 3 && now - a.t > 120000){ a.n++; a.t = now; ringNow = true; } });
+  if (ringNow && remind().sound) beep();
+  $('#tab-race').dataset.due = L.due.length || '';
+  if ($('#race').hidden) return;
+  if (key !== liveKey) return renderLive();
+  const c = $('#lvClock'); if (c) c.textContent = fmtHMS(L.e);
+  const n = $('#lvNext'); if (n && L.next) n.textContent = 'in ' + fmtLeft(L.next.min - L.e);
+  const g = $('#lvAgo'); if (g && L.due[0]) g.textContent = agoText(L.e - L.due[0].min);
+  const ga = $('#lvGpsAge'); if (ga) ga.textContent = gpsAge();
+}
+
+/* screen and sound */
+let wl = null, wakeState = '';
+async function keepAwake(){
+  if (!live) return;
+  if (!('wakeLock' in navigator)){ wakeState = 'unsupported'; return updWake(); }
+  try { wl = await navigator.wakeLock.request('screen'); wakeState = 'on'; wl.addEventListener('release', () => { wakeState = ''; updWake(); }); }
+  catch(e){ wakeState = 'blocked'; }
+  updWake();
+}
+function releaseWake(){ try { if (wl) wl.release(); } catch(e){} wl = null; wakeState = ''; }
+function wakeText(){ return wakeState === 'on' ? 'Your screen stays on while this page is open.' : 'Your screen may lock. For the race, set Auto-Lock to Never in Settings, Display & Brightness, and keep this page open.'; }
+function updWake(){ const el = $('#lvWake'); if (el) el.textContent = wakeText(); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && live){ keepAwake(); tick(); } });
+let ac = null;
+function unlockAudio(){
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch(e){ ac = null; }
+}
+function beep(){
+  if (!ac) return;
+  const t0 = ac.currentTime + 0.03;
+  [0, 0.28, 0.56].forEach((dt, k) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square'; o.frequency.value = k === 2 ? 1320 : 880;
+    g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.3, t0 + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.2);
+    o.connect(g); g.connect(ac.destination); o.start(t0 + dt); o.stop(t0 + dt + 0.22);
+  });
+}
+document.addEventListener('pointerdown', unlockAudio, { passive:true });
+
+/* settings, schedule, calendar */
+function renderFuel(){
+  const r = remind();
+  $('#rCarbs').value = r.carbsEvery || ''; $('#rSodium').value = r.sodiumEvery || ''; $('#rDrink').value = r.drinkEvery || '';
+  $('#rCp').checked = !!r.cp; $('#rSound').checked = !!r.sound;
+  const S = schedule(), cnt = k => S.filter(x => x.items.some(i => i.kind === k)).length;
+  $('#rSummary').textContent = S.length ? `${S.length} reminders over ${fmtDur(legs().slice(-1)[0].b)}: ${cnt('carbs')} carbs, ${cnt('sodium')} sodium, ${cnt('drink')} fluid and ${cnt('cp')} checkpoint.` : '';
+  renderSchedule(); renderCal();
+}
+function renderSchedule(){
+  const S = schedule(), box = $('#schedList');
+  if (!S.length){ box.innerHTML = '<p class="note">Add your race plan in Setup to build the schedule.</p>'; return; }
+  const st = toMin(race.start) ?? 0;
+  box.innerHTML = legs().map((l, k) => {
+    const items = S.filter(x => x.min > l.a && x.min <= l.b);
+    return `<details ${k === 0 ? 'open' : ''}><summary>${esc(l.from)} to ${esc(l.to)}<span class="q">, ${fmtDur(l.b - l.a)}, ${items.length} reminder${items.length === 1 ? '' : 's'}</span></summary>
+      <ol>${items.map(x => `<li><span class="t">${fmtClock(st + x.min)}</span><span class="rt">${fmtDur(x.min)}</span><span>${esc(remText(x))}</span></li>`).join('')}</ol></details>`;
+  }).join('');
+}
+function renderCal(){
+  if (!$('#cDate').value) $('#cDate').value = isoDate(new Date());
+  if (!$('#cStart').value) $('#cStart').value = race.start || '';
+  $('#btnIcs').disabled = inClaude; $('#btnTest').disabled = inClaude;
+  if (inClaude){ const st = $('#icsStatus'); st.classList.remove('err'); st.textContent = 'Calendar files can’t be saved from inside Claude. This works once the app has its own web link. Until then, ask Claude in the chat to add these reminders to your calendar.'; }
+}
+const icsEsc = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+const icsDate = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + 'T' + pad(d.getHours()) + pad(d.getMinutes()) + '00';
+function buildIcs(base, rems, calName){
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Trail race planner//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + icsEsc(calName)];
+  rems.forEach((r, k) => {
+    const s = new Date(base.getTime() + r.min * 60000), e = new Date(s.getTime() + 60000), txt = r.title || remText(r);
+    L.push('BEGIN:VEVENT', `UID:${stamp}-${k}@trail-race-planner`, 'DTSTAMP:' + stamp, 'DTSTART:' + icsDate(s), 'DTEND:' + icsDate(e),
+      'SUMMARY:' + icsEsc(txt), 'DESCRIPTION:' + icsEsc('Race time ' + fmtDur(r.min)),
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(txt), 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  return L.join('\r\n');
+}
+function downloadFile(name, text){
+  const u = URL.createObjectURL(new Blob([text], { type:'text/calendar' }));
+  const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 15000);
+}
+function exportIcs(test){
+  const st = $('#icsStatus'); st.classList.remove('err');
+  if (inClaude) return renderCal();
+  let rems, base, name;
+  if (test){
+    base = new Date(Date.now() + 2 * 60000); base.setSeconds(0, 0);
+    rems = [{ min:0, title:'Test: take 30 g carbs', items:[] }]; name = 'fuel-alert-test.ics';
+  } else {
+    const m = toMin($('#cStart').value), dv = $('#cDate').value;
+    if (m == null || !dv){ st.classList.add('err'); st.textContent = 'Pick the race date and start time first.'; return; }
+    const [y, mo, da] = dv.split('-').map(Number);
+    base = new Date(y, mo - 1, da, Math.floor(m / 60), m % 60, 0, 0);
+    const inc = $('#cDrink').checked;
+    rems = schedule().map(r => ({ min:r.min, items:r.items.filter(i => inc || i.kind !== 'drink') })).filter(r => r.items.length);
+    if (!rems.length){ st.classList.add('err'); st.textContent = 'No reminders to add yet. Add your race plan in Setup first.'; return; }
+    name = (race.name || 'race').replace(/[^\w-]+/g, '-') + '-fuel.ics';
+  }
+  downloadFile(name, buildIcs(base, rems, (race.name || 'Race') + ' fuel'));
+  st.textContent = test ? 'Test file created. Add it to Calendar, lock your phone and wait 2 minutes.' : `Calendar file with ${rems.length} alerts created. Tap Add All in the preview, and delete them from Calendar after the race.`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const act = b.dataset.act;
+  if (act === 'start') startLive(Date.now());
+  else if (act === 'startAt'){
+    const m = toMin($('#lvAt').value); if (m == null) return;
+    const d = new Date(); d.setHours(Math.floor(m / 60), m % 60, 0, 0);
+    if (d.getTime() > Date.now()) d.setDate(d.getDate() - 1);
+    startLive(d.getTime());
+  }
+  else if (act === 'sound'){ unlockAudio(); beep(); }
+  else if (act === 'done' || act === 'skip'){ live.log[b.dataset.id] = act; live.order.push(b.dataset.id); saveLive(); renderLive(); }
+  else if (act === 'alldone'){ liveState().due.forEach(r => { live.log[r.id] = 'done'; live.order.push(String(r.id)); }); saveLive(); renderLive(); }
+  else if (act === 'undo'){ const id = live.order.pop(); if (id != null){ delete live.log[id]; alerted.delete(+id); } saveLive(); renderLive(); }
+  else if (act === 'end'){ if (!confirm('End the race timer? Your fuel log will be cleared.')) return; live = null; saveLive(); releaseWake(); gpsStop(); pos = null; renderLive(); }
+  else if (act === 'ics') exportIcs(false);
+  else if (act === 'test') exportIcs(true);
+  else if (act === 'now'){ const d = new Date(); $('#cStart').value = pad(d.getHours()) + ':' + pad(d.getMinutes()); $('#cDate').value = isoDate(d); }
+});
+const bindR = (id, key, bool) => $(id).addEventListener('change', e => {
+  const r = remind();
+  if (bool) r[key] = e.target.checked; else { const n = parseInt(e.target.value, 10); r[key] = isFinite(n) && n > 0 ? Math.min(n, 600) : 0; }
+  race.remind = r; save(); renderFuel();
+});
+bindR('#rCarbs', 'carbsEvery'); bindR('#rSodium', 'sodiumEvery'); bindR('#rDrink', 'drinkEvery'); bindR('#rCp', 'cp', true); bindR('#rSound', 'sound', true);
+
+/* ---------- GPS tracking ---------- */
+let watchId = null, pos = null, gpsMsg = '', offCount = 0, lastDraw = 0, lastLiveSave = 0;
+function planMinAt(pk){
+  const d = derive(); let k0 = 0, m0 = 0;
+  for (const s of d){
+    if (s.raceMin == null) return null;
+    if (pk <= s.km) return m0 + (pk - k0) / ((s.km - k0) || 1) * (s.raceMin - m0);
+    k0 = s.km; m0 = s.raceMin;
+  }
+  return d.length ? m0 : null;
+}
+function matchRoute(R, f, kmA, kmB){
+  const p = R.pts, i0 = Math.max(0, idxAt(R, Math.max(0, kmA)) - 1), i1 = Math.min(p.length - 1, idxAt(R, Math.min(R.total, kmB)) + 1);
+  const kx = Math.cos(f.lat * Math.PI / 180) * 111320, ky = 110540;
+  let best = { dist:Infinity, km:0 };
+  for (let i = i0; i < i1; i++){
+    const a = p[i], b = p[i + 1];
+    const ax = (a[3] - f.lon) * kx, ay = (a[2] - f.lat) * ky, dx = (b[3] - a[3]) * kx, dy = (b[2] - a[2]) * ky, L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+    const dist = Math.hypot(ax + t * dx, ay + t * dy);
+    if (dist < best.dist) best = { dist, km:a[0] + t * (b[0] - a[0]) };
+  }
+  return best;
+}
+function gpsStart(){
+  if (!('geolocation' in navigator)){ gpsMsg = 'This browser can’t use GPS.'; return updGps(); }
+  if (watchId != null) return;
+  gpsMsg = 'Waiting for GPS…';
+  try { watchId = navigator.geolocation.watchPosition(onFix, onGpsErr, { enableHighAccuracy:true, maximumAge:5000, timeout:30000 }); }
+  catch(e){ watchId = null; gpsMsg = 'GPS couldn’t start here.'; }
+  updGps();
+}
+function gpsStop(){ if (watchId != null){ try { navigator.geolocation.clearWatch(watchId); } catch(e){} } watchId = null; updGps(); }
+function onGpsErr(err){
+  if (err.code === 1){
+    gpsStop();
+    gpsMsg = inClaude ? 'Location is blocked inside Claude. Open the app from its own link or your Home Screen and allow location.' : 'Location is off for this app. Allow it in Settings, Privacy & Security, Location Services.';
+  } else gpsMsg = err.code === 3 ? 'Still looking for GPS. A clear view of the sky helps.' : 'GPS signal lost. Still trying.';
+  updGps();
+}
+function onFix(p){
+  const c = p.coords, R = route();
+  const fix = { lat:c.latitude, lon:c.longitude, acc:c.accuracy, t:p.timestamp || Date.now() };
+  if (!R){ pos = Object.assign(fix, { km:null }); gpsMsg = ''; return updGps(); }
+  if (c.accuracy > 150){ gpsMsg = `Weak GPS (±${Math.round(c.accuracy)} m). Waiting for a better fix.`; return updGps(); }
+  const prev = live && live.gps && live.gps.km != null ? live.gps.km : (pos && pos.km != null ? pos.km : 0);
+  const limit = Math.max(80, c.accuracy * 1.5);
+  let m = matchRoute(R, fix, prev - 1, prev + 6);
+  if (m.dist > limit){ if (++offCount >= 3){ const g = matchRoute(R, fix, 0, R.total); if (g.dist <= limit){ m = g; offCount = 0; } } } else offCount = 0;
+  const off = m.dist > limit;
+  pos = Object.assign(fix, { km: off ? prev : m.km, off, dist:m.dist });
+  gpsMsg = '';
+  if (live && !off){
+    const newCp = markPassed(prev, m.km, fix.t);
+    live.gps = { km:m.km, t:fix.t };
+    if (newCp || Date.now() - lastLiveSave > 15000){ saveLive(); lastLiveSave = Date.now(); }
+    if (newCp && !$('#race').hidden) return renderLive();
+  }
+  updGps();
+  if (!$('#course').hidden && Date.now() - lastDraw > 3000){ lastDraw = Date.now(); drawProfile(); drawOutline(); }
+}
+function markPassed(fromKm, toKm, t){
+  const R = route(), sc = scaleOf(R); let any = false;
+  if (!live.cps) live.cps = {};
+  if (toKm - fromKm > 20) return false;
+  race.stops.forEach((s, i) => { const k = s.km * sc; if (!live.cps[i] && k > fromKm - 0.05 && k <= toKm + 0.05){ live.cps[i] = t; any = true; } });
+  return any;
+}
+const deltaText = m => Math.abs(m) < 1 ? 'On plan' : `${Math.abs(m) >= 60 ? fmtDur(Math.abs(m)) : Math.round(Math.abs(m)) + ' min'} ${m > 0 ? 'behind' : 'ahead of'} plan`;
+function gpsAge(){
+  if (!pos) return '';
+  const s = Math.max(0, Math.round((Date.now() - pos.t) / 1000));
+  return `GPS ±${Math.round(pos.acc)} m, updated ${s < 60 ? s + ' s' : Math.round(s / 60) + ' min'} ago`;
+}
+function crsPosText(){
+  if (pos && pos.km != null) return `You’re at km ${pos.km.toFixed(1)}${pos.off ? ', off the course' : ''}.`;
+  return watchId != null || gpsMsg ? gpsMsg : '';
+}
+function cpDelta(){
+  const d = derive(), c = (live && live.cps) || {}; let li = -1;
+  Object.keys(c).forEach(k => { if (+k > li) li = +k; });
+  if (li < 0 || !d[li] || d[li].raceMin == null) return null;
+  return { name:d[li].name, delta:(c[li] - live.startedAt) / 60000 - d[li].raceMin };
+}
+function gpsInner(){
+  const R = route(), on = watchId != null;
+  let body = '';
+  if (!R) body = '<p class="note">Add the course GPX in Setup to compare where you are with your plan.</p>';
+  else if (pos && pos.km != null){
+    const sc = scaleOf(R), pm = planMinAt(pos.km / sc), d = derive();
+    const ni = race.stops.findIndex(s => s.km * sc > pos.km + 0.05);
+    let pace = '', next = '', fin = '';
+    if (live && pm != null){
+      const e = (Date.now() - live.startedAt) / 60000, ratio = pm > 20 ? Math.min(1.8, Math.max(0.6, e / pm)) : 1;
+      const st = new Date(live.startedAt), stMin = st.getHours() * 60 + st.getMinutes();
+      pace = `<p class="pace">${deltaText(e - pm)}</p>`;
+      if (ni >= 0 && d[ni].raceMin != null) next = `, about ${fmtClock(stMin + e + (d[ni].raceMin - pm) * ratio)} (plan ${fmtClock(stMin + d[ni].raceMin)})`;
+      const last = d[d.length - 1];
+      if (last && last.raceMin != null) fin = `<p class="sub">Projected finish ${fmtClock(stMin + e + (last.raceMin - pm) * ratio)}, plan ${fmtClock(stMin + last.raceMin)}</p>`;
+    }
+    body = pace + `<p class="sub">km ${pos.km.toFixed(1)} of ${R.total.toFixed(1)}, ${fmtN(eleAt(R, pos.km))} m</p>` +
+      (ni >= 0 ? `<p class="sub">Next: ${esc(race.stops[ni].name)} in ${(race.stops[ni].km * sc - pos.km).toFixed(1)} km${next}</p>` : '') + fin +
+      (pos.off ? `<p class="offc">You’re ${fmtN(pos.dist)} m from the course. Check your route.</p>` : '') +
+      `<p class="sub faint" id="lvGpsAge">${gpsAge()}</p>`;
+  } else {
+    const cd = live ? cpDelta() : null;
+    if (cd) body += `<p class="pace">${deltaText(cd.delta)}</p><p class="sub">At ${esc(cd.name)}</p>`;
+    body += `<p class="note" style="margin-top:6px">${esc(gpsMsg || (on ? 'Waiting for GPS…' : 'GPS is off. Turn it on to see where you are against your plan, or tap I’m here at each checkpoint.'))}</p>`;
+  }
+  return `<h2>Position</h2>${body}${R ? `<div class="row"><button class="btn ghost" data-act="gpsToggle">${on ? 'Turn GPS off' : 'Turn GPS on'}</button></div>` : ''}`;
+}
+function updGps(){
+  const el = $('#lvGps'); if (el && !$('#race').hidden) el.innerHTML = gpsInner();
+  const cp = $('#crsPos'); if (cp) cp.textContent = crsPosText();
+}
+function splitsHTML(stMin){
+  const d = derive(); if (!d.length) return '';
+  const c = live.cps || {}, nextI = d.findIndex((s, i) => !c[i]);
+  const rows = d.map((s, i) => {
+    const plan = s.raceMin != null ? fmtClock(stMin + s.raceMin) : '--:--';
+    let act = '';
+    if (c[i]){
+      const t = new Date(c[i]), dl = s.raceMin != null ? (c[i] - live.startedAt) / 60000 - s.raceMin : null;
+      act = fmtClock(t.getHours() * 60 + t.getMinutes()) + (dl != null ? ` <span class="q">${Math.abs(dl) < 1 ? '±0' : (dl > 0 ? '+' : '−') + Math.round(Math.abs(dl))}</span>` : '');
+    } else if (i === nextI) act = `<button class="btn ghost sm" data-act="mark" data-i="${i}">I’m here</button>`;
+    return `<li><span class="blaze">${i + 1}</span><span class="nm">${esc(s.name)}</span><span class="pl">${plan}</span><span class="ac">${act}</span></li>`;
+  }).join('');
+  return `<div class="panel"><h2>Checkpoints</h2><p class="hint">Plan times count from your real start. GPS marks each checkpoint as you pass it, or tap I’m here. Minutes after the time show how far behind (+) or ahead (−) you were.</p>
+    <ol class="splits"><li class="hd"><span></span><span></span><span>Plan</span><span class="ac">Actual</span></li>${rows}</ol></div>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const act = b.dataset.act;
+  if (act === 'locate'){ race.gpsOn = true; save(); gpsStart(); }
+  else if (act === 'gpsToggle'){ if (watchId != null){ race.gpsOn = false; gpsStop(); } else { race.gpsOn = true; gpsStart(); } save(); updGps(); }
+  else if (act === 'mark' && live){
+    const i = +b.dataset.i, R = route(); if (!live.cps) live.cps = {};
+    live.cps[i] = Date.now();
+    if (R) live.gps = { km: race.stops[i].km * scaleOf(R), t: Date.now() };
+    saveLive(); renderLive();
+  }
+});
+
+/* ---------- offline app ---------- */
+if (!window.claude){
+  if (!document.querySelector('link[rel="manifest"]')){
+    [['manifest', 'manifest.webmanifest'], ['apple-touch-icon', 'apple-touch-icon.png']].forEach(([rel, href]) => { const l = document.createElement('link'); l.rel = rel; l.href = href; document.head.appendChild(l); });
+  }
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+/* ---------- events ---------- */
+function showTab(name){
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  ['race','course','fuel','setup'].forEach(n => { $('#' + n).hidden = n !== name; });
+  if (name === 'race') renderLive(); else if (name === 'course') renderCourse(); else if (name === 'fuel') renderFuel(); else fillSetup();
+  window.scrollTo(0, 0);
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab],[data-go],[data-del],#btnAdd,#btnParse,#btnSample,#btnClear');
+  if (!t) return;
+  if (t.dataset.tab) return showTab(t.dataset.tab);
+  if (t.dataset.go) return showTab(t.dataset.go);
+  if (t.dataset.del != null){ race.stops.splice(+t.dataset.del, 1); save(); renderReview(); renderHeader(); return; }
+  if (t.id === 'btnAdd'){
+    const last = race.stops[race.stops.length - 1];
+    race.stops.push({ name:'New checkpoint', km: last ? +(last.km + 1).toFixed(1) : 1, arrive:null, legMin:null, carbs:null, flasks:null, sodium:null, gain:null, loss:null });
+    save(); renderReview(); return;
+  }
+  if (t.id === 'btnSample'){ $('#inPlan').value = SAMPLE; $('#planStatus').textContent = 'Sample text added. Tap Read plan.'; $('#planStatus').classList.remove('err'); return; }
+  if (t.id === 'btnParse'){
+    const txt = $('#inPlan').value, st = $('#planStatus');
+    const res = parsePlan(txt);
+    if (!res.stops.length){
+      st.classList.add('err');
+      st.textContent = 'No checkpoints found. Paste text that has lines like “km 12.5 to 25.0, 2:16, arrive 09:45” or “km 12.5, +808 / -273 m since last”.';
+      return;
+    }
+    st.classList.remove('err');
+    race.stops = res.stops;
+    const got = [`${res.stops.length} checkpoints`];
+    if (res.counts.segs) got.push(`fuel for ${res.counts.segs} legs`);
+    if (res.start){ race.start = res.start; got.push('start ' + res.start); }
+    if (res.targets){ race.targets = res.targets; got.push(`${res.targets.carbs} g carbs, ${res.targets.fluid} ml fluid and ${res.targets.sodium} mg sodium per hour`); }
+    if (res.name && !race.name) race.name = res.name;
+    st.textContent = 'Found ' + got.join(', ') + '.' + (res.warnings.length ? ' ' + res.warnings.join(' ') : '');
+    save(); fillSetup(); renderHeader();
+    return;
+  }
+  if (t.id === 'btnClear'){
+    if (!confirm('Remove the course, plan and settings from this phone?')) return;
+    race = blank(); RC = null; RCsrc = null; live = null; saveLive(); releaseWake(); gpsStop(); pos = null;
+    try { localStorage.removeItem(KEY); } catch(e){}
+    $('#inPlan').value = ''; $('#planStatus').textContent = '';
+    fillSetup(); renderHeader();
+  }
+});
+$('#review').addEventListener('change', e => {
+  const inp = e.target; if (!inp.dataset || inp.dataset.i == null) return;
+  const i = +inp.dataset.i, k = inp.dataset.k, v = inp.value.trim(), s = race.stops[i]; if (!s) return;
+  if (k === 'name') s.name = v || s.name;
+  else if (k === 'km'){
+    const n = parseFloat(v.replace(',', '.'));
+    if (isFinite(n) && n >= 0){ s.km = n; race.stops.sort((a, b) => a.km - b.km); }
+    rerenderReviewKeepFocus();
+  }
+  else if (k === 'arrive'){ editArrive(i, v); rerenderReviewKeepFocus(); }
+  else { const n = parseInt(v, 10); s[k] = isFinite(n) && n >= 0 ? n : null; }
+  save(); renderHeader();
+});
+const bindNum = (id, key) => $(id).addEventListener('change', e => { const n = parseInt(e.target.value, 10); if (isFinite(n) && n >= 0){ race.targets[key] = n; save(); renderReview(); } });
+bindNum('#inCarbs', 'carbs'); bindNum('#inFluid', 'fluid'); bindNum('#inSodium', 'sodium');
+$('#inName').addEventListener('change', e => { race.name = e.target.value.trim(); save(); renderHeader(); });
+$('#inStart').addEventListener('change', e => {
+  const n = toMin(e.target.value), o = toMin(race.start); if (n == null) return;
+  if (o != null) race.stops.forEach(s => { const a = toMin(s.arrive); if (a != null) s.arrive = fmtClock(a + n - o); });
+  race.start = fmtClock(n); save(); renderHeader(); renderReview();
+});
+$('#inGpx').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  gpxStatus('Reading ' + f.name + '…');
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const g = parseGPX(r.result);
+      race.route = { name:g.name, file:f.name, pts:g.pts, hasEle:g.hasEle };
+      if (!race.name && g.name) race.name = g.name;
+      RC = null; RCsrc = null;
+      save(); gpxStatus(); renderHeader(); fillSetup();
+    } catch(err){ gpxStatus(err.message, true); }
+    e.target.value = '';
+  };
+  r.onerror = () => gpxStatus('Couldn’t read that file. Try downloading the GPX again.', true);
+  r.readAsText(f);
+});
+let rz;
+window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!$('#course').hidden && route()){ drawProfile(); drawOutline(); } }, 150); });
+
+const SAMPLE = `2026-PST100-V1
+fuel plan, 60 g carbs, 500 ml fluid, 400 mg sodium per hour
+Start to A1
+km 0.00 to 12.5, 2:30, arrive 07:29
+150 g
+3 flasks, 1000 mg sodium
+A1 to A2
+km 12.5 to 25.0, 2:16, arrive 09:45
+135 g
+3 flasks, 900 mg sodium
+A2 to A3
+km 25.0 to 38.9, 2:03, arrive 11:48
+125 g
+2 flasks, 800 mg sodium
+A3 to A4
+km 38.9 to 52.1, 2:35, arrive 14:23
+155 g
+3 flasks, 1050 mg sodium
+A4 to A5
+km 52.1 to 62.1, 2:02, arrive 16:25
+120 g
+2 flasks, 800 mg sodium
+A5 to A6
+km 62.1 to 72.6, 3:07, arrive 19:32
+185 g
+4 flasks, 1250 mg sodium
+A6 to WO
+km 72.6 to 81.4, 1:55, arrive 21:27
+115 g
+2 flasks, 750 mg sodium
+WO to A7
+km 81.4 to 87.2, 0:53, arrive 22:21
+55 g
+1 flask, 350 mg sodium
+A7 to A8
+km 87.2 to 98.1, 1:59, arrive 00:19
+120 g
+2 flasks, 800 mg sodium
+A8 to Finish
+km 98.1 to 106.3, 1:42, arrive 02:02
+100 g
+2 flasks, 700 mg sodium
+whole race
+12.0 L carried in 24 flasks of 500 ml
+1260 g
+carbs in total
+predicted finish, arrive 02:02
+21:02
+
+2026-PST100-V1
+checkpoint plan, start 05:00
+A1
+km 12.5, +808 / -273 m since last
+07:29
+race time 2:30
+A2
+km 25.0, +595 / -593 m since last
+09:45
+race time 4:46
+A3
+km 38.9, +231 / -852 m since last
+11:48
+race time 6:48
+A4
+km 52.1, +579 / -517 m since last
+14:23
+race time 9:24
+A5
+km 62.1, +521 / -564 m since last
+16:25
+race time 11:26
+A6
+km 72.6, +1146 / -221 m since last
+19:32
+race time 14:32
+WO
+km 81.4, +469 / -481 m since last
+21:27
+race time 16:28
+A7
+km 87.2, +33 / -773 m since last
+22:21
+race time 17:21
+A8
+km 98.1, +242 / -411 m since last
+00:19
+race time 19:20
+predicted finish, arrive 02:02
+21:02`;
+
+renderHeader();
+setInterval(tick, 1000);
+if (live) keepAwake();
+if (live && race.gpsOn !== false && route()) gpsStart();
+showTab(live ? 'race' : (race.stops.length || race.route ? 'course' : 'setup'));
+})();
+</script>
+</body>
+</html>
