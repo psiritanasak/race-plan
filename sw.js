@@ -1,5 +1,5 @@
 // Trail race planner: offline cache. Change VERSION after editing any file.
-const VERSION = 'trailplan-v4';
+const VERSION = 'trailplan-v5';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

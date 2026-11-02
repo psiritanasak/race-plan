@@ -373,7 +373,7 @@ function scaleOf(R){
 }
 
 /* ---------- plan text parser ---------- */
-function parsePlan(text){
+function parsePlan(text, totalKm){
   const t = String(text).replace(/[\u2212\u2013\u2014]/g,'-').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ');
   const lines = t.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   const num = s => parseFloat(String(s).replace(',', '.'));
@@ -391,45 +391,77 @@ function parsePlan(text){
   const cpRe = /km\s*(\d+(?:[.,]\d+)?)\s*,?\s*\+\s*(\d+)\s*\/\s*-\s*(\d+)\s*m/gi;
   const toName = s => { const x = /(?:^|\s)([A-Za-z][\w]*)\s+to\s+([A-Za-z0-9][\w]*)\s*$/i.exec(s || ''); return x ? x[2] : null; };
   const tailName = s => { const x = /([A-Za-z][A-Za-z0-9]{0,11})\s*$/.exec(s || ''); return x && !/^(km|m|last|time)$/i.test(x[1]) ? x[1] : null; };
+  const carbRe = /(?:^|[\s,])(\d{1,4})\s?g\b(?!\s*(?:carbs|\/\s*h|per\s+h))/gi;
+  const fuelRe = /(\d+)\s*flasks?\s*,?\s*(\d+)\s*mg\s*sodium/gi;
+  const rtRe = /race\s*time\s*(\d+:\d{2})/gi;
+  const finRe = /predicted\s*finish\s*,?\s*arrive\s*(\d{1,2}[:.]\d{2})/gi;
+  // Read the text in order and give each carbs, flask, race time or clock line to the leg or
+  // checkpoint just above it, so one missing line can't shift every later value along by one.
   const segs = [], cps = [];
+  let seg = null, cp = null, fin = null;
   lines.forEach((line, i) => {
+    if (/whole\s*race|carried\s*in/i.test(line)) seg = null;
+    const toks = [];
+    for (const [re, kind] of [[segRe, 'seg'], [cpRe, 'cp'], [carbRe, 'carbs'], [fuelRe, 'fuel'], [rtRe, 'rt'], [finRe, 'fin']])
+      for (const x of line.matchAll(re)) toks.push({ kind, x });
+    toks.sort((a, b) => a.x.index - b.x.index);
     let prevEnd = 0;
-    for (const x of line.matchAll(segRe)){
-      let to = toName(line.slice(prevEnd, x.index));
+    for (const { kind, x } of toks){
+      if (kind === 'seg'){
+        let to = toName(line.slice(prevEnd, x.index));
+        if (!to && i > 0 && !/km\s*\d/i.test(lines[i-1])) to = toName(lines[i-1]);
+        seg = { to, km:num(x[2]), legMin:dur(x[3]), arrive:clock(x[4]), carbs:null, flasks:null, sodium:null };
+        segs.push(seg); cp = null; fin = null;
+      } else if (kind === 'cp'){
+        let name = tailName(line.slice(prevEnd, x.index));
+        if (!name && i > 0 && /^[A-Za-z][\w ]{0,15}$/.test(lines[i-1]) && !skip.test(lines[i-1])) name = lines[i-1];
+        cp = { name, km:num(x[1]), gain:+x[2], loss:+x[3], raceMin:null, arrive:null };
+        cps.push(cp); seg = null; fin = null;
+      } else if (kind === 'carbs'){ if (seg && seg.carbs == null) seg.carbs = +x[1]; }
+      else if (kind === 'fuel'){ if (seg && seg.flasks == null){ seg.flasks = +x[1]; seg.sodium = +x[2]; } }
+      else if (kind === 'rt'){ const o = cp || fin; if (o && o.raceMin == null) o.raceMin = dur(x[1]); }
+      else { fin = { arrive:clock(x[1]), raceMin:null }; seg = null; cp = null; }
       prevEnd = x.index + x[0].length;
-      if (!to && i > 0 && !/km\s*\d/i.test(lines[i-1])) to = toName(lines[i-1]);
-      segs.push({ to, km:num(x[2]), legMin:dur(x[3]), arrive:clock(x[4]) });
     }
-    prevEnd = 0;
-    for (const x of line.matchAll(cpRe)){
-      let name = tailName(line.slice(prevEnd, x.index));
-      prevEnd = x.index + x[0].length;
-      if (!name && i > 0 && /^[A-Za-z][\w ]{0,15}$/.test(lines[i-1]) && !skip.test(lines[i-1])) name = lines[i-1];
-      cps.push({ name, km:num(x[1]), gain:+x[2], loss:+x[3] });
+    // A line with only a time is a checkpoint's arrival clock, or the race time after "predicted finish".
+    if (!toks.length && /^\d{1,2}[:.]\d{2}$/.test(line)){
+      if (fin){ if (fin.raceMin == null) fin.raceMin = dur(line.replace('.', ':')); }
+      else if (cp && cp.arrive == null) cp.arrive = clock(line);
     }
   });
-  const rts = Array.from(t.matchAll(/race\s*time\s*(\d+:\d{2})/gi)).map(x => dur(x[1]));
-  rts.forEach((v, k) => { if (cps[k]) cps[k].raceMin = v; });
-  const carbs = Array.from(t.matchAll(/(?:^|[\s,])(\d{1,4})\s?g\b(?!\s*(?:carbs|\/\s*h|per\s+h))/gim)).map(x => +x[1]);
-  const fuel = Array.from(t.matchAll(/(\d+)\s*flasks?\s*,?\s*(\d+)\s*mg\s*sodium/gi)).map(x => [+x[1], +x[2]]);
-  if (segs.length){
-    if (carbs.length < segs.length) out.warnings.push(`Found ${carbs.length} carb amounts for ${segs.length} legs. Check the carbs column.`);
-    if (fuel.length < segs.length) out.warnings.push(`Found ${fuel.length} flask and sodium lines for ${segs.length} legs. Check those columns.`);
-  }
-  const stops = segs.map((s, k) => ({
+  const stops = segs.map(s => ({
     name: s.to || '', km: s.km, arrive: s.arrive, legMin: s.legMin,
-    carbs: carbs[k] ?? null, flasks: fuel[k] ? fuel[k][0] : null, sodium: fuel[k] ? fuel[k][1] : null,
+    carbs: s.carbs, flasks: s.flasks, sodium: s.sodium,
     gain: null, loss: null
   }));
+  const legStops = stops.slice();
   cps.forEach(c => {
     let st = stops.find(s => Math.abs(s.km - c.km) < 0.25);
     if (!st){ st = { name:'', km:c.km, arrive:null, legMin:null, carbs:null, flasks:null, sodium:null, gain:null, loss:null }; stops.push(st); }
     if (!st.name && c.name) st.name = c.name;
     st.gain = c.gain; st.loss = c.loss;
     if (c.raceMin != null) st.raceMin = c.raceMin;
+    if (!st.arrive && c.arrive) st.arrive = c.arrive;
   });
   stops.sort((a, b) => a.km - b.km);
+  // The checkpoint plan has the finish time but not its km, so take the km from the GPX.
+  let finAdded = false;
+  if (fin && !segs.length && (fin.raceMin != null || fin.arrive)){
+    const lastKm = stops.length ? stops[stops.length - 1].km : 0;
+    if (totalKm > lastKm){
+      const st = { name:'Finish', km:+totalKm.toFixed(1), arrive:fin.arrive, legMin:null, carbs:null, flasks:null, sodium:null, gain:null, loss:null };
+      if (fin.raceMin != null) st.raceMin = fin.raceMin;
+      stops.push(st); finAdded = true;
+    } else out.warnings.push('Found the finish time but not the finish km. Add the GPX file and tap Read plan again, or add the finish by hand.');
+  }
   stops.forEach((s, i) => { if (!s.name) s.name = (i === stops.length - 1 && segs.length) ? 'Finish' : 'CP ' + (i + 1); });
+  const list = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0];
+  const noCarbs = legStops.filter(s => s.carbs == null).map(s => s.name), noFuel = legStops.filter(s => s.flasks == null).map(s => s.name);
+  if (noCarbs.length) out.warnings.push(`No carbs found for the leg to ${list(noCarbs)}, so ${noCarbs.length === 1 ? 'it is' : 'they are'} estimated. Check the carbs column.`);
+  if (noFuel.length) out.warnings.push(`No flasks and sodium found for the leg to ${list(noFuel)}, so ${noFuel.length === 1 ? 'it is' : 'they are'} estimated. Check those columns.`);
+  const noTime = stops.filter(s => s.raceMin == null && s.legMin == null && !s.arrive).map(s => s.name);
+  if (noTime.length) out.warnings.push(`No time found for ${list(noTime)}. Add ${noTime.length === 1 ? 'its' : 'their'} arrival time below.`);
+  if (finAdded) out.warnings.push(`The finish km (${stops[stops.length - 1].km.toFixed(1)}) comes from your GPX file.`);
   out.stops = stops;
   out.counts = { segs:segs.length, cps:cps.length };
   return out;
@@ -1087,7 +1119,7 @@ document.addEventListener('click', e => {
   if (t.id === 'btnSample'){ $('#inPlan').value = SAMPLE; $('#planStatus').textContent = 'Sample text added. Tap Read plan.'; $('#planStatus').classList.remove('err'); return; }
   if (t.id === 'btnParse'){
     const txt = $('#inPlan').value, st = $('#planStatus');
-    const res = parsePlan(txt);
+    const R = route(), res = parsePlan(txt, R ? R.total : null);
     if (!res.stops.length){
       st.classList.add('err');
       st.textContent = 'No checkpoints found. Paste text that has lines like “km 12.5 to 25.0, 2:16, arrive 09:45” or “km 12.5, +808 / -273 m since last”.';
