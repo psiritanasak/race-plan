@@ -1,6 +1,6 @@
 # Trail race planner
 
-An offline web app for trail races: GPX course, race plan from screenshots, fuel reminders and GPS pacing.
+An offline web app for trail races: GPX course, race plan from screenshots (or added checkpoint by checkpoint), fuel reminders and GPS pacing.
 
 ## Put it online (free)
 
