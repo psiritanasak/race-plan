@@ -211,6 +211,13 @@ textarea{min-height:150px;resize:vertical;font-size:15px;line-height:1.4}
 .past .sub{color:var(--muted);font-size:14px}
 .pred-fin{margin:16px 0 2px;font-size:30px;font-weight:700;letter-spacing:-.02em}
 .pred-fin .q{display:block;font-size:15px;font-weight:400;letter-spacing:0;margin-top:2px}
+.adj{margin:16px 0 4px}
+.adj .seg{margin:6px 0 10px}
+.f-lbl{font-size:13px;color:var(--muted)}
+.stepper{display:grid;grid-template-columns:52px 1fr 52px;gap:10px;align-items:center}
+.stepper .btn{padding:0;font-size:24px;font-weight:400}
+.stepper span{text-align:center;font-weight:600}
+.useplan{margin-top:16px;padding-top:16px;border-top:.5px solid var(--line)}
 .strengths{margin:12px 0 4px;padding:10px 12px;background:var(--surface-2);border-radius:10px;font-size:14px;color:var(--muted)}
 .strengths b{color:var(--ink);font-weight:600}
 
@@ -292,13 +299,10 @@ textarea{min-height:150px;resize:vertical;font-size:15px;line-height:1.4}
         <h2>Checkpoints</h2>
         <div id="review"></div>
         <details class="paste">
-          <summary>Paste a plan from screenshots</summary>
-          <p class="hint" style="margin:8px 0 10px">In Photos, press and hold the text, Select All, Copy, then paste here. Fuel and checkpoint plans can go in together.</p>
-          <textarea id="inPlan" aria-label="Plan text" placeholder="Start to A1&#10;km 0.00 to 12.5, 2:30, arrive 07:29&#10;150 g&#10;3 flasks, 1000 mg sodium&#10;…"></textarea>
-          <div class="row">
-            <button class="btn" id="btnParse">Read plan</button>
-            <button class="link" id="btnSample">Try a sample</button>
-          </div>
+          <summary>Paste a plan</summary>
+          <p class="hint" style="margin:8px 0 10px">From a planner screenshot (press and hold the text in Photos, Select All, Copy) or a spreadsheet. One checkpoint per line, with its km and arrival or race time.</p>
+          <textarea id="inPlan" aria-label="Plan text" placeholder="Aid 1, 12.5 km, 07:30&#10;Aid 2, 25 km, 09:45&#10;Finish, 42 km, 12:10"></textarea>
+          <div class="row"><button class="btn" id="btnParse">Read plan</button></div>
         </details>
         <p class="status" id="planStatus"></p>
       </div>
@@ -316,12 +320,10 @@ textarea{min-height:150px;resize:vertical;font-size:15px;line-height:1.4}
           <ul class="past" id="pastList"></ul>
         </div>
         <div id="predGoal" hidden>
-          <label class="f" style="max-width:200px"><span>Goal time (h:mm)</span><input id="inGoal" inputmode="decimal" placeholder="22:30"></label>
+          <label class="f" style="max-width:200px"><span>Goal time (h:mm)</span><input id="inGoal" inputmode="decimal" placeholder="h:mm"></label>
           <p class="hint" style="margin-top:8px">Spread over the course by its climbs and descents.</p>
         </div>
         <div id="predOpts">
-          <label class="f" style="max-width:260px;margin-top:14px"><span>Effort</span>
-            <select id="inEffort"><option value="10">Easier than before</option><option value="5">A bit easier</option><option value="0" selected>Same as before</option><option value="-4">A bit harder</option><option value="-8">Harder than before</option></select></label>
           <label class="chk"><input type="checkbox" id="inFat" checked> Slow down like before</label>
           <label class="chk"><input type="checkbox" id="inStops" checked> Stop like before</label>
         </div>
@@ -485,7 +487,7 @@ function parsePlan(text, totalKm){
   if ((m = /(\d+)\s*g\s*carbs?\s*,?\s*(\d+)\s*ml\s*(?:fluid|water)?\s*,?\s*(\d+)\s*mg\s*sodium/i.exec(t))) out.targets = { carbs:+m[1], fluid:+m[2], sodium:+m[3] };
   if ((m = /start\s*,?\s*(\d{1,2}[:.]\d{2})/i.exec(t))) out.start = clock(m[1]);
   const skip = /km\b|fuel plan|checkpoint plan|carbs|flask|sodium|race time|arrive|since last|predicted|powered|planner|^\d+([:.]\d+)?$/i;
-  const nl = lines.find(l => !skip.test(l) && l.length >= 2 && l.length <= 40 && !/\bto\b/i.test(l));
+  const nl = lines.find(l => !skip.test(l) && l.length >= 2 && l.length <= 40 && !/\bto\b/i.test(l) && !/\d:\d{2}/.test(l));
   if (nl) out.name = nl;
 
   const segRe = /km\s*(\d+(?:[.,]\d+)?)\s*to\s*(\d+(?:[.,]\d+)?)\s*,?\s*(\d+:\d{2})\s*,?\s*arrive\s*(\d{1,2}[:.]\d{2})/gi;
@@ -563,9 +565,39 @@ function parsePlan(text, totalKm){
   const noTime = stops.filter(s => s.raceMin == null && s.legMin == null && !s.arrive).map(s => s.name);
   if (noTime.length) out.warnings.push(`No time found for ${list(noTime)}. Add ${noTime.length === 1 ? 'its' : 'their'} arrival time below.`);
   if (finAdded) out.warnings.push(`The finish km (${stops[stops.length - 1].km.toFixed(1)}) comes from your GPX file.`);
+  if (!stops.length){ const sp = parseSimple(lines, out.start || race.start); stops.push(...sp.stops); if (sp.note) out.warnings.push(sp.note); }
   out.stops = stops;
   out.counts = { segs:segs.length, cps:cps.length };
   return out;
+}
+// Any other plan: one checkpoint per line with a km and a time, such as "Aid 1, 12.5 km, 07:30" or a
+// row copied from a spreadsheet. Times are read as clock times or as race times from the start,
+// whichever gives a believable pace on the first leg, unless the text says which.
+function parseSimple(lines, start){
+  const rows = [];
+  lines.forEach(l => {
+    const times = Array.from(l.matchAll(/(?<![\d.,:])(\d{1,2}):(\d{2})(?::\d{2})?(?![\d:])/g));
+    if (!times.length) return;
+    const tm = times[times.length - 1], rest = l.slice(0, tm.index) + ' ' + l.slice(tm.index + tm[0].length);
+    let kmM = /(?<![\w.,])(\d+(?:[.,]\d+)?)\s*km\b/i.exec(rest) || /\bkm\s*(\d+(?:[.,]\d+)?)/i.exec(rest);
+    if (!kmM){ const all = Array.from(rest.matchAll(/(?:^|[\s,;|])(\d+(?:[.,]\d+)?)(?=[\s,;|]|$)/g)); kmM = all[all.length - 1]; }
+    if (!kmM) return;
+    const km = parseFloat(kmM[1].replace(',', '.'));
+    if (!(km > 0)) return;
+    const name = rest.slice(0, kmM.index).replace(/[,;|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30);
+    rows.push({ name, km, t: +tm[1] * 60 + +tm[2], kind: /arriv|eta|clock/i.test(l) ? 'clock' : /race\s*time|elapsed|cumul/i.test(l) ? 'race' : '' });
+  });
+  if (!rows.length) return { stops: [] };
+  rows.sort((a, b) => a.km - b.km);
+  const st = toMin(start) ?? 0, r0 = rows[0], votes = rows.map(r => r.kind).filter(Boolean);
+  let mode = votes.length ? (votes.filter(v => v === 'clock').length * 2 >= votes.length ? 'clock' : 'race') : null;
+  if (!mode){
+    const score = leg => { const pace = leg / r0.km; return leg > 0 && pace >= 3 && pace <= 40 ? Math.abs(Math.log(pace / 10)) : Infinity; };
+    mode = score(r0.t) < score((r0.t - st + 1440) % 1440) ? 'race' : 'clock';
+  }
+  const stops = rows.map((r, i) => Object.assign({ name: r.name || (i === rows.length - 1 ? 'Finish' : 'CP ' + (i + 1)), km: r.km,
+    arrive: mode === 'clock' ? fmtClock(r.t) : null, legMin:null, carbs:null, flasks:null, sodium:null, gain:null, loss:null }, mode === 'race' ? { raceMin: r.t } : {}));
+  return { stops, note: `Times read as ${mode === 'clock' ? 'arrival clock times' : 'race times from the start'}. Check them below.` };
 }
 
 /* ---------- derived plan ---------- */
@@ -1561,7 +1593,7 @@ function parseActivity(text, file){
   const nm = Array.from(doc.getElementsByTagNameNS('*','name')).find(n => n.parentNode && n.parentNode.localName === 'trk');
   return { name: (nm && nm.textContent.trim().slice(0, 60)) || file.replace(/\.gpx$/i, ''), date: isoDate(new Date(t0)), km: +d.toFixed(1), gain: Math.round(gain), min: Math.round(min), stop: Math.round(stop), rows, on: true };
 }
-function predSettings(){ return Object.assign({ mode:'past', goal:'', effort:0, fat:true, stops:true }, race.predict || {}); }
+function predSettings(){ return Object.assign({ mode:'past', goal:'', fat:true, stops:true, adjKind:'effort', adj:0 }, race.predict || {}); }
 const goalMin = s => { const m = /^(\d{1,3})[:.](\d{2})$/.exec(String(s || '').trim()); return m && +m[2] < 60 && +m[1] * 60 + +m[2] > 0 ? +m[1] * 60 + +m[2] : null; };
 // One model learned from all the chosen past races together (a weak default prior, so a single race is enough).
 const pmCache = new Map();
@@ -1585,27 +1617,33 @@ function predictFrom(list, P){
     const mv = runFrom(m, 0, 0, 0, sc), total = mv.finish * sf / (1 - sf);
     return units ? runFrom(m, 0, 0, total / units, sc) : { at: mv.at, finish: mv.finish + total };
   };
-  const adjust = m => Object.assign({}, m, { p: m.p * (1 + (P.mode === 'past' ? P.effort : 0) / 100) }, P.mode === 'past' && !P.fat ? { phi: MODEL0.phi } : {});
-  let M = adjust(base);
-  if (goal != null){
-    // Same shape of race, faster or slower overall until the finish lands on the goal.
+  const adjust = m => Object.assign({}, m, P.mode === 'past' && !P.fat ? { phi: MODEL0.phi } : {});
+  // Same shape of race, faster or slower overall until the finish lands on the target.
+  const fitTo = (m, target) => {
     let lo = 0.2, hi = 5;
-    for (let k = 0; k < 40; k++){ const mid = (lo + hi) / 2; if (run(Object.assign({}, M, { p: base.p * mid })).finish > goal) hi = mid; else lo = mid; }
-    M = Object.assign({}, M, { p: base.p * (lo + hi) / 2 });
-    const r = run(M);
-    return { at: r.at, finish: r.finish, M, sf, past: list.length };
-  }
+    for (let k = 0; k < 40; k++){ const mid = (lo + hi) / 2; if (run(Object.assign({}, m, { p: m.p * mid })).finish > target) hi = mid; else lo = mid; }
+    return Object.assign({}, m, { p: m.p * (lo + hi) / 2 });
+  };
+  const M = adjust(base);
+  if (goal != null){ const G = fitTo(M, goal), r = run(G); return { at: r.at, finish: r.finish, M: G, sf, past: list.length }; }
   const r = run(M);
   // Likely range: fatigue at the edges of what your races allow, and how sure we are of your pace,
   // plus some room for race-to-race differences (weather, form, terrain).
   const sp = Math.sqrt(1 / (1 / 0.0225 + (base.nEff || 0) / Math.max(base.s2 || 0, 0.0064)) + 0.05 ** 2);
   const ends = P.fat ? [base.lo || base, base.hi || base].map(adjust) : [Object.assign({}, M, { phi: M.phi - 0.08 }), Object.assign({}, M, { phi: M.phi + 0.08 })];
   const lo = Math.min(r.finish, run(ends[0]).finish) * Math.exp(-sp), hi = Math.max(r.finish, run(ends[1]).finish) * Math.exp(sp);
-  return { at: r.at, finish: r.finish, lo, hi, M, sf, past: list.length };
+  const out = { at: r.at, finish: r.finish, lo, hi, M, sf, past: list.length };
+  // Your target: more or less effort (pace faster or slower by that share), or a finish so much earlier or later.
+  const a = P.adj || 0;
+  if (!a) return out;
+  const T = P.adjKind === 'time' ? fitTo(M, Math.max(r.finish * 0.5, r.finish - a)) : Object.assign({}, M, { p: M.p / (1 + a / 100) }), r2 = run(T);
+  return Object.assign(out, { at: r2.at, finish: r2.finish, predicted: r.finish });
 }
+const adjText = P => { const a = P.adj || 0; if (!a) return 'As predicted';
+  return P.adjKind === 'time' ? `${fmtDur(Math.abs(a))} ${a > 0 ? 'faster' : 'slower'}` : `${Math.abs(a)}% ${a > 0 ? 'more' : 'less'} effort`; };
 const predCache = new WeakMap();
 function racePrediction(h){
-  const P = Object.assign(predSettings(), { mode:'past' }), key = JSON.stringify(P) + PMkey + (EFsrc ? EFsrc.total : '');
+  const P = Object.assign(predSettings(), { mode:'past', adj:0 }), key = JSON.stringify(P) + PMkey + (EFsrc ? EFsrc.total : '');
   const c = predCache.get(h); if (c && c.key === key) return c.v;
   const r = predictFrom([h], P), v = r ? r.finish : null;
   predCache.set(h, { key, v });
@@ -1628,16 +1666,24 @@ function renderPredict(){
   const P = predSettings(), out = $('#predOut'), R = route();
   $(`#predPanel input[name="pmode"][value="${P.mode}"]`).checked = true;
   $('#predPast').hidden = P.mode !== 'past'; $('#predGoal').hidden = P.mode !== 'goal'; $('#predOpts').hidden = P.mode !== 'past';
-  $('#inGoal').value = P.goal || ''; $('#inEffort').value = String(P.effort); $('#inFat').checked = P.fat; $('#inStops').checked = P.stops;
+  $('#inGoal').value = P.goal || ''; $('#inFat').checked = P.fat; $('#inStops').checked = P.stops;
   renderPastList();
   if (!R){ out.innerHTML = '<p class="note" style="margin-top:12px">Add the course GPX first, so there’s a course to predict.</p>'; return; }
   const on = hist.filter(h => h.on), r = predictFrom(on, P);
   if (!r){ out.innerHTML = P.mode === 'past' && hist.length ? '<p class="note" style="margin-top:12px">Tick a past race to use it.</p>' : ''; return; }
   const st = toMin(race.start) ?? 0, sc = scaleOf(R), d = derive(), last = d[d.length - 1];
   const range = r.lo != null && r.hi - r.lo >= 10 ? ` <span class="q">likely ${fmtDur(r.lo)} to ${fmtDur(r.hi)}</span>` : '';
-  let html = `<p class="pred-fin">Finish in ${fmtDur(r.finish)}${range}</p>
-    <p class="hint">That’s ${fmtClock(st + r.finish)} with a ${esc(race.start || '00:00')} start.${last && last.raceMin != null ? ` Your plan now says ${fmtDur(last.raceMin)}.` : ''}</p>`;
-  if (r.past && P.mode === 'past') html += strengthsHTML(r.M, r.sf);
+  let html = r.predicted != null
+    ? `<p class="pred-fin">Target ${fmtDur(r.finish)} <span class="q">predicted ${fmtDur(r.predicted)}${range ? ', ' + range.replace(/<[^>]+>/g, '').trim() : ''}</span></p>`
+    : `<p class="pred-fin">Finish in ${fmtDur(r.finish)}${range}</p>`;
+  html += `<p class="hint">That’s ${fmtClock(st + r.finish)} with a ${esc(race.start || '00:00')} start.${last && last.raceMin != null ? ` Your race plan now says ${fmtDur(last.raceMin)}.` : ''}</p>`;
+  if (P.mode === 'past'){
+    const k = P.adjKind === 'time' ? 'time' : 'effort';
+    html += `<div class="adj"><p class="f-lbl">Adjust target</p>
+      <div class="seg" role="radiogroup" aria-label="Adjust by"><label><input type="radio" name="adjkind" value="effort"${k === 'effort' ? ' checked' : ''}><span>Effort</span></label><label><input type="radio" name="adjkind" value="time"${k === 'time' ? ' checked' : ''}><span>Finish time</span></label></div>
+      <div class="stepper"><button type="button" class="btn ghost" data-adj="-1" aria-label="${k === 'time' ? 'Slower' : 'Less effort'}">−</button><span aria-live="polite">${adjText(P)}</span><button type="button" class="btn ghost" data-adj="1" aria-label="${k === 'time' ? 'Faster' : 'More effort'}">+</button></div></div>`;
+    if (r.past) html += strengthsHTML(r.M, r.sf);
+  }
   if (race.stops.length){
     let pk = 0, pt = 0;
     const rows = race.stops.map((s, i) => {
@@ -1650,23 +1696,30 @@ function renderPredict(){
     }).join('');
     html += `<ol class="stops" style="margin-top:10px">${rows}</ol>
       <p class="hint" style="margin-top:8px">Arrival times. Each leg includes the stop before it.</p>
-      <div class="row"><button class="btn" type="button" id="btnUsePred">Use as my plan</button>${predUndo ? '<button class="btn ghost" type="button" id="btnUndoPred">Undo</button>' : ''}</div>
-      <p class="status" id="predStatus"></p>`;
+      <div class="useplan">
+        <div class="row" style="margin-top:0"><button class="btn" type="button" id="btnUsePred" style="flex:1">Use as race plan</button>${predUndo ? '<button class="btn ghost" type="button" id="btnUndoPred">Undo</button>' : ''}</div>
+        <p class="hint" style="margin-top:8px">Race day, fuel reminders and the Course tab will follow these times.</p>
+        <p class="status" id="predStatus"></p>
+      </div>`;
   } else html += '<p class="note" style="margin-top:10px">Add checkpoints above to get a time for each.</p>';
   out.innerHTML = html;
 }
-function setPred(k, v){ race.predict = Object.assign(predSettings(), { [k]: v }); save(); renderPredict(); }
+function setPred(k, v){ race.predict = Object.assign(predSettings(), typeof k === 'object' ? k : { [k]: v }); save(); renderPredict(); }
 $('#predPanel').addEventListener('change', e => {
   const t = e.target;
   if (t.name === 'pmode') setPred('mode', t.value);
-  else if (t.id === 'inGoal'){ const g = t.value.trim(); if (g && goalMin(g) == null){ $('#predOut').innerHTML = '<p class="status err">Write the goal as hours and minutes, like 22:30.</p>'; return; } setPred('goal', g); }
-  else if (t.id === 'inEffort') setPred('effort', +t.value);
+  else if (t.id === 'inGoal'){ const g = t.value.trim(); if (g && goalMin(g) == null){ $('#predOut').innerHTML = '<p class="status err">Write the goal as hours and minutes, like 6:30.</p>'; return; } setPred('goal', g); }
+  else if (t.name === 'adjkind') setPred({ adjKind: t.value, adj: 0 });
   else if (t.id === 'inFat') setPred('fat', t.checked);
   else if (t.id === 'inStops') setPred('stops', t.checked);
   else if (t.dataset.pon != null){ hist[+t.dataset.pon].on = t.checked; saveHist(); renderPredict(); }
 });
 $('#predPanel').addEventListener('click', e => {
-  const t = e.target.closest('[data-pdel],#btnUsePred,#btnUndoPred'); if (!t) return;
+  const t = e.target.closest('[data-pdel],[data-adj],#btnUsePred,#btnUndoPred'); if (!t) return;
+  if (t.dataset.adj){
+    const P = predSettings(), time = P.adjKind === 'time', step = time ? 15 : 5;
+    return setPred('adj', Math.max(time ? -600 : -20, Math.min(time ? 600 : 30, (P.adj || 0) + step * +t.dataset.adj)));
+  }
   if (t.dataset.pdel != null){ hist.splice(+t.dataset.pdel, 1); saveHist(); renderPredict(); return; }
   if (t.id === 'btnUsePred'){
     const r = predictFrom(hist.filter(h => h.on), predSettings()); if (!r) return;
@@ -1674,7 +1727,7 @@ $('#predPanel').addEventListener('click', e => {
     const st = toMin(race.start) ?? 0;
     race.stops.forEach((s, i) => { if (r.at[i] == null) return; s.raceMin = Math.round(r.at[i]); s.arrive = fmtClock(st + s.raceMin); s.legMin = null; });
     save(); renderHeader(); renderReview(); renderPredict();
-    $('#predStatus').textContent = 'Checkpoint times updated.';
+    $('#predStatus').innerHTML = 'Done. Race day now follows these times. <button class="link" type="button" data-go="race">Go to Race</button>';
   } else {
     if (!predUndo) return;
     race.stops.forEach((s, i) => { const u = predUndo[i]; if (!u) return; if (u.raceMin == null) delete s.raceMin; else s.raceMin = u.raceMin; s.arrive = u.arrive; s.legMin = u.legMin; });
@@ -1716,19 +1769,18 @@ function showTab(name){
   window.scrollTo(0, 0);
 }
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-go],[data-del],#btnAdd,#btnParse,#btnSample,#btnClear');
+  const t = e.target.closest('[data-tab],[data-go],[data-del],#btnAdd,#btnParse,#btnClear');
   if (!t) return;
   if (t.dataset.tab) return showTab(t.dataset.tab);
   if (t.dataset.go) return showTab(t.dataset.go);
   if (t.dataset.del != null){ openRv.clear(); pinTimes(); race.stops.splice(+t.dataset.del, 1); save(); renderReview(); renderHeader(); renderPredict(); return; }
   if (t.id === 'btnAdd') return openCpSheet(false);
-  if (t.id === 'btnSample'){ $('#inPlan').value = SAMPLE; $('#planStatus').textContent = 'Sample text added. Tap Read plan.'; $('#planStatus').classList.remove('err'); return; }
   if (t.id === 'btnParse'){
     const txt = $('#inPlan').value, st = $('#planStatus');
     const R = route(), res = parsePlan(txt, R ? R.total : null);
     if (!res.stops.length){
       st.classList.add('err');
-      st.textContent = 'No checkpoints found. Paste text that has lines like “km 12.5 to 25.0, 2:16, arrive 09:45” or “km 12.5, +808 / -273 m since last”.';
+      st.textContent = 'No checkpoints found. Each line needs a km and a time, like “Aid 1, 12.5 km, 07:30”.';
       return;
     }
     st.classList.remove('err');
@@ -1797,97 +1849,6 @@ $('#inGpx').addEventListener('change', e => {
 });
 let rz;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!$('#course').hidden && route()){ drawProfile(); drawOutline(); } }, 150); });
-
-const SAMPLE = `2026-PST100-V1
-fuel plan, 60 g carbs, 500 ml fluid, 400 mg sodium per hour
-Start to A1
-km 0.00 to 12.5, 2:30, arrive 07:29
-150 g
-3 flasks, 1000 mg sodium
-A1 to A2
-km 12.5 to 25.0, 2:16, arrive 09:45
-135 g
-3 flasks, 900 mg sodium
-A2 to A3
-km 25.0 to 38.9, 2:03, arrive 11:48
-125 g
-2 flasks, 800 mg sodium
-A3 to A4
-km 38.9 to 52.1, 2:35, arrive 14:23
-155 g
-3 flasks, 1050 mg sodium
-A4 to A5
-km 52.1 to 62.1, 2:02, arrive 16:25
-120 g
-2 flasks, 800 mg sodium
-A5 to A6
-km 62.1 to 72.6, 3:07, arrive 19:32
-185 g
-4 flasks, 1250 mg sodium
-A6 to WO
-km 72.6 to 81.4, 1:55, arrive 21:27
-115 g
-2 flasks, 750 mg sodium
-WO to A7
-km 81.4 to 87.2, 0:53, arrive 22:21
-55 g
-1 flask, 350 mg sodium
-A7 to A8
-km 87.2 to 98.1, 1:59, arrive 00:19
-120 g
-2 flasks, 800 mg sodium
-A8 to Finish
-km 98.1 to 106.3, 1:42, arrive 02:02
-100 g
-2 flasks, 700 mg sodium
-whole race
-12.0 L carried in 24 flasks of 500 ml
-1260 g
-carbs in total
-predicted finish, arrive 02:02
-21:02
-
-2026-PST100-V1
-checkpoint plan, start 05:00
-A1
-km 12.5, +808 / -273 m since last
-07:29
-race time 2:30
-A2
-km 25.0, +595 / -593 m since last
-09:45
-race time 4:46
-A3
-km 38.9, +231 / -852 m since last
-11:48
-race time 6:48
-A4
-km 52.1, +579 / -517 m since last
-14:23
-race time 9:24
-A5
-km 62.1, +521 / -564 m since last
-16:25
-race time 11:26
-A6
-km 72.6, +1146 / -221 m since last
-19:32
-race time 14:32
-WO
-km 81.4, +469 / -481 m since last
-21:27
-race time 16:28
-A7
-km 87.2, +33 / -773 m since last
-22:21
-race time 17:21
-A8
-km 98.1, +242 / -411 m since last
-00:19
-race time 19:20
-predicted finish, arrive 02:02
-21:02`;
-
 renderHeader();
 setInterval(tick, 1000);
 if (live) keepAwake();
