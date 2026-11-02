@@ -106,6 +106,10 @@ button,input,textarea,select{font:inherit;color:inherit}
 input,textarea,select{width:100%;min-width:0;background:var(--surface-2);border:0;border-radius:10px;padding:11px 12px;font-size:17px}
 input::placeholder,textarea::placeholder{color:var(--faint)}
 input[type="time"],select{min-height:44px}
+input[type="time"],input[type="date"]{-webkit-appearance:none;appearance:none;display:block;min-width:0;text-align:left}
+input[type="time"]::-webkit-date-and-time-value,input[type="date"]::-webkit-date-and-time-value{text-align:left}
+.startat{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:6px}
+.btn.armed{background:var(--blaze);color:var(--blaze-ink)}
 textarea{min-height:150px;resize:vertical;font-size:15px;line-height:1.4}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px}
 .btn{appearance:none;border:0;border-radius:12px;padding:12px 18px;min-height:46px;background:var(--ink);color:var(--surface);font-weight:600;font-size:16px;cursor:pointer}
@@ -213,7 +217,7 @@ textarea{min-height:150px;resize:vertical;font-size:15px;line-height:1.4}
 .pred-fin .q{display:block;font-size:15px;font-weight:400;letter-spacing:0;margin-top:2px}
 .adj{margin:16px 0 4px}
 .adj .seg{margin:6px 0 10px}
-.f-lbl{font-size:13px;color:var(--muted)}
+.f-lbl{display:block;font-size:13px;color:var(--muted)}
 .stepper{display:grid;grid-template-columns:52px 1fr 52px;gap:10px;align-items:center}
 .stepper .btn{padding:0;font-size:24px;font-weight:400}
 .stepper span{text-align:center;font-weight:600}
@@ -978,9 +982,9 @@ function saveLive(){ try { if (live) localStorage.setItem(LKEY, JSON.stringify(l
 const alerted = new Map();
 function startLive(at){ live = { startedAt:at, log:{}, order:[] }; const e0 = (Date.now() - at) / 60000; schedule().forEach(r => { if (r.min <= e0) live.log[r.id] = 'past'; }); live.gps = { km:0 }; live.cps = {}; live.track = []; alerted.clear(); saveLive(); unlockAudio(); keepAwake(); if (race.gpsOn !== false && route()) gpsStart(); renderLive(); window.scrollTo(0, 0); }
 function liveState(){
-  const S = schedule(), e = (Date.now() - live.startedAt) / 60000;
-  const due = S.filter(r => r.min <= e && !live.log[r.id]);
-  const next = S.find(r => r.min > e) || null;
+  const S = schedule(), e = ((live.finishedAt || Date.now()) - live.startedAt) / 60000, done = !!live.finishedAt;
+  const due = done ? [] : S.filter(r => r.min <= e && !live.log[r.id]);
+  const next = done ? null : S.find(r => r.min > e) || null;
   const sums = { carbs:[0, 0], sodium:[0, 0], drink:[0, 0] };
   S.forEach(r => { if (r.min > e || live.log[r.id] === 'past') return; r.items.forEach(i => { if (!sums[i.kind]) return; sums[i.kind][1] += i.amount; if (live.log[r.id] === 'done') sums[i.kind][0] += i.amount; }); });
   return { S, e, due, next, sums };
@@ -996,22 +1000,28 @@ function renderLive(){
     if (!schedule().length && !route()){ box.innerHTML = `<div class="panel empty"><h2>Race day</h2><p>Add a course and checkpoints first.</p><button class="btn" data-go="setup">Set up race</button></div>`; return; }
     box.innerHTML = `<div class="panel">
       <button class="btn big" data-act="start">Start race</button>
-      <p class="hint" style="margin-top:10px">Tap at the gun. Keep this screen open for alerts.</p>
-      <div class="row" style="margin-top:18px"><label class="f" style="flex:1 1 150px"><span>Started already?</span><input id="lvAt" type="time" value="${esc(race.start || '')}"></label><button class="btn ghost" data-act="startAt" style="align-self:flex-end">Start from then</button></div>
-      <div class="row"><button class="link" data-act="sound">Test sound</button></div></div>`;
+      <p class="hint" style="margin-top:10px">Tap at the gun. Keep this screen open for alerts.</p></div>
+      <div class="panel">
+      <label class="f-lbl" for="lvAt">Started already?</label>
+      <div class="startat"><input id="lvAt" type="time" value="${esc(race.start || '')}"><button class="btn ghost" data-act="startAt">Start from then</button></div>
+      <div class="row"><button class="link" data-act="sound">Test sound</button><span class="hint" id="sndStatus" aria-live="polite"></span></div></div>`;
     return;
   }
+  if (live.finishedAt) return renderFinished(box);
   const L = liveState(), st = new Date(live.startedAt), stMin = st.getHours() * 60 + st.getMinutes();
   const legsL = legs(), nl = legsL.find(l => l.b > L.e);
   const plan = nl ? `Plan: ${esc(nl.to)} at ${fmtClock(stMin + nl.b)}, in ${fmtDur(nl.b - L.e)}.` : 'Past the planned finish time.';
   const bar = (k, label, unit) => { const [a, b] = L.sums[k]; if (!b) return ''; const pct = Math.min(100, Math.round(a / b * 100)); return `<div><p class="lbl"><span>${label}</span><b>${fmtN(a)} / ${fmtN(b)} ${unit}</b></p><div class="bar"><i style="width:${pct}%"></i></div></div>`; };
-  const d0 = L.due[0];
+  const d0 = L.due[0], lastCp = (live.cps || {})[race.stops.length - 1], atFin = race.stops.length && cpTimed(lastCp) ? lastCp : null;
   box.innerHTML = `<div class="panel live">
       <p class="hint">Race time</p>
       <p class="live-clock" id="lvClock">${fmtHMS(L.e)}</p>
       <p class="sub">Started ${fmtClock(stMin)}. ${plan}</p>
       <p class="sub" id="lvWake">${wakeText()}</p>
+      <div class="row"><button class="btn ghost" data-act="finish" style="flex:1">Finish race</button></div>
     </div>
+    ${atFin != null ? `<div class="panel due" role="alert"><p class="hint">Finish line</p><p class="next-what">You reached ${esc(race.stops[race.stops.length - 1].name)} at ${fmtHMS((atFin - live.startedAt) / 60000)}.</p>
+      <div class="row"><button class="btn" data-act="finish" data-at="${atFin}">Finish race</button></div></div>` : ''}
     ${d0 ? `<div class="panel due" role="alert">
       <p class="hint">${L.due.length > 1 ? `Now, ${L.due.length} waiting` : 'Now'}</p>
       <p class="next-what">${esc(remText(d0))}</p>
@@ -1022,10 +1032,32 @@ function renderLive(){
              : `<div class="panel note">No more reminders. Bring it home.</div>`}
     <div class="panel"><h2>Taken so far</h2><div class="prog">${bar('carbs', 'Carbs', 'g')}${bar('sodium', 'Sodium', 'mg')}${bar('drink', 'Fluid', 'ml')}</div>
       ${!L.sums.carbs[1] && !L.sums.sodium[1] && !L.sums.drink[1] ? '<p class="note">Your first reminder hasn’t come up yet.</p>' : ''}
-      <div class="row"><button class="btn ghost" data-act="undo" ${live.order.length ? '' : 'disabled'}>Undo last</button><button class="btn danger" data-act="end">End race</button></div></div>
+      <div class="row"><button class="btn ghost" data-act="undo" ${live.order.length ? '' : 'disabled'}>Undo last</button><button class="btn danger" data-act="end">Cancel race</button></div></div>
     ${splitsHTML(stMin)}`;
   liveKey = L.due.map(r => r.id).join(',') + '|' + (L.next ? L.next.id : '');
   $('#tab-race').dataset.due = L.due.length || '';
+}
+function renderFinished(box){
+  const L = liveState(), st = new Date(live.startedAt), stMin = st.getHours() * 60 + st.getMinutes(), fin = new Date(live.finishedAt);
+  const d = derive(), last = d[d.length - 1];
+  const bar = (k, label, unit) => { const [a, b] = L.sums[k]; if (!b) return ''; return `<div><p class="lbl"><span>${label}</span><b>${fmtN(a)} / ${fmtN(b)} ${unit}</b></p><div class="bar"><i style="width:${Math.min(100, Math.round(a / b * 100))}%"></i></div></div>`; };
+  const fuel = bar('carbs', 'Carbs', 'g') + bar('sodium', 'Sodium', 'mg') + bar('drink', 'Fluid', 'ml');
+  box.innerHTML = `<div class="panel live">
+      <p class="hint">Finished</p>
+      <p class="live-clock">${fmtHMS(L.e)}</p>
+      <p class="sub">Started ${fmtClock(stMin)}, finished ${fmtClock(fin.getHours() * 60 + fin.getMinutes())}.</p>
+      ${last && last.raceMin != null ? `<p class="sub">${deltaText(L.e - last.raceMin)}, plan ${fmtDur(last.raceMin)}.</p>` : ''}
+    </div>
+    ${fuel ? `<div class="panel"><h2>Fuel taken</h2><div class="prog">${fuel}</div></div>` : ''}
+    ${splitsHTML(stMin)}
+    <div class="row" style="margin:4px 0 0"><button class="btn ghost" data-act="resume">Resume race</button><button class="btn danger" data-act="close">Close race</button></div>`;
+  liveKey = 'finished'; $('#tab-race').dataset.due = '';
+}
+function finishRace(at){
+  live.finishedAt = at;
+  const li = race.stops.length - 1;
+  if (li >= 0 && !cpTimed((live.cps || {})[li])){ live.cps = live.cps || {}; live.cps[li] = at; live.finishCp = true; }
+  saveLive(); releaseWake(); gpsStop(); renderLive(); window.scrollTo(0, 0);
 }
 function tick(){
   if (!live) return;
@@ -1054,14 +1086,38 @@ async function keepAwake(){
 function releaseWake(){ try { if (wl) wl.release(); } catch(e){} wl = null; wakeState = ''; }
 function wakeText(){ return wakeState === 'on' ? 'Your screen stays on while this page is open.' : 'Your screen may lock. For the race, set Auto-Lock to Never in Settings, Display & Brightness, and keep this page open.'; }
 function updWake(){ const el = $('#lvWake'); if (el) el.textContent = wakeText(); }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && live){ keepAwake(); tick(); } });
-let ac = null;
-function unlockAudio(){
-  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
-  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch(e){ ac = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && live && !live.finishedAt){ keepAwake(); if (ac && ac.state !== 'running') ac.resume(); tick(); } });
+// The alert plays as a short sound file through a media element, which iPhones play even with the
+// ring/silent switch on silent (Web Audio is muted by it). Web Audio is the fallback. Browsers only allow
+// sound after a tap, so the first tap plays the file muted once to unlock it for later reminders.
+let ac = null, snd = null, sndReady = false, sndBusy = false, sndGen = 0;
+function beepWav(){
+  const rate = 22050, len = Math.ceil(rate * 0.8), pcm = new Int16Array(len);
+  [[0, 880], [0.28, 880], [0.56, 1320]].forEach(([t0, f]) => {
+    const a = Math.floor(t0 * rate), n = Math.floor(0.2 * rate);
+    for (let i = 0; i < n; i++){ const env = Math.min(1, i / (0.01 * rate), (n - i) / (0.03 * rate)); pcm[a + i] = Math.sign(Math.sin(2 * Math.PI * f * i / rate)) * 0.45 * 32767 * env; }
+  });
+  const buf = new ArrayBuffer(44 + len * 2), v = new DataView(buf), str = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); v.setUint32(4, 36 + len * 2, true); str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, len * 2, true);
+  new Int16Array(buf, 44).set(pcm);
+  return URL.createObjectURL(new Blob([buf], { type:'audio/wav' }));
 }
-function beep(){
-  if (!ac) return;
+function unlockAudio(prime = true){
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
+  if (!snd){ try { snd = new Audio(beepWav()); snd.preload = 'auto'; snd.addEventListener('ended', () => { sndBusy = false; }); } catch(e){ snd = null; } }
+  if (prime && snd && !sndReady && !sndBusy){
+    sndBusy = true; snd.muted = true;
+    const g = ++sndGen, p = snd.play();
+    // If a real beep started meanwhile (same tap), leave it playing.
+    const done = ok => { if (ok) sndReady = true; if (g !== sndGen) return; snd.pause(); snd.currentTime = 0; snd.muted = false; sndBusy = false; };
+    if (p && p.then) p.then(() => done(true), () => done(false)); else done(true);
+  }
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state !== 'running') ac.resume(); } catch(e){ ac = null; }
+}
+function webBeep(){
+  if (!ac) return false;
+  if (ac.state !== 'running') ac.resume();
   const t0 = ac.currentTime + 0.03;
   [0, 0.28, 0.56].forEach((dt, k) => {
     const o = ac.createOscillator(), g = ac.createGain();
@@ -1069,8 +1125,22 @@ function beep(){
     g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.3, t0 + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.2);
     o.connect(g); g.connect(ac.destination); o.start(t0 + dt); o.stop(t0 + dt + 0.22);
   });
+  return ac.state === 'running';
 }
-document.addEventListener('pointerdown', unlockAudio, { passive:true });
+// Resolves true if a sound started.
+function beep(){
+  if (!snd) return Promise.resolve(webBeep());
+  sndGen++; sndBusy = true; snd.muted = false; snd.currentTime = 0;
+  let p; try { p = snd.play(); } catch(e){ p = Promise.reject(e); }
+  return Promise.resolve(p).then(() => { sndReady = true; return true; }, () => { sndBusy = false; return webBeep(); });
+}
+async function testSound(){
+  unlockAudio(false);
+  const ok = await beep(), st = $('#sndStatus');
+  if (st) st.textContent = ok ? 'Can’t hear it? Turn the volume up.' : 'Sound is blocked. Turn the volume up and tap Test sound again.';
+}
+// iPhones only allow sound from a tap that has ended, not from the first touch.
+['touchend', 'click'].forEach(ev => document.addEventListener(ev, () => { if (!sndReady) unlockAudio(); }, { passive:true }));
 
 /* settings, schedule, calendar */
 function renderFuel(){
@@ -1157,11 +1227,27 @@ document.addEventListener('click', e => {
     if (d.getTime() > Date.now()) d.setDate(d.getDate() - 1);
     startLive(d.getTime());
   }
-  else if (act === 'sound'){ unlockAudio(); beep(); }
+  else if (act === 'sound') testSound();
   else if (act === 'done' || act === 'skip'){ live.log[b.dataset.id] = act; live.order.push(b.dataset.id); saveLive(); renderLive(); }
   else if (act === 'alldone'){ liveState().due.forEach(r => { live.log[r.id] = 'done'; live.order.push(String(r.id)); }); saveLive(); renderLive(); }
   else if (act === 'undo'){ const id = live.order.pop(); if (id != null){ delete live.log[id]; alerted.delete(+id); } saveLive(); renderLive(); }
-  else if (act === 'end'){ if (!confirm('End the race timer? Your fuel log will be cleared.')) return; live = null; saveLive(); releaseWake(); gpsStop(); pos = null; renderLive(); }
+  else if (act === 'end' || act === 'close'){
+    if (!confirm(act === 'end' ? 'Cancel this race? The timer and fuel log are cleared.' : 'Close this race? Your time, splits and fuel log are cleared.')) return;
+    live = null; saveLive(); releaseWake(); gpsStop(); pos = null; renderLive();
+  }
+  else if (act === 'finish'){
+    // Two taps, so a bump in a pocket can't end the race. The finish-line banner passes its own time.
+    if (!b.dataset.at && b.dataset.armed !== '1'){
+      b.dataset.armed = '1'; b.textContent = 'Tap again to finish'; b.classList.add('armed');
+      setTimeout(() => { if (b.isConnected){ b.dataset.armed = ''; b.textContent = 'Finish race'; b.classList.remove('armed'); } }, 4000);
+      return;
+    }
+    finishRace(b.dataset.at ? +b.dataset.at : Date.now());
+  }
+  else if (act === 'resume'){
+    if (live.finishCp){ delete live.cps[race.stops.length - 1]; delete live.finishCp; }
+    delete live.finishedAt; saveLive(); keepAwake(); if (race.gpsOn !== false && route()) gpsStart(); renderLive();
+  }
   else if (act === 'ics') exportIcs(false);
   else if (act === 'test') exportIcs(true);
   else if (act === 'now'){ const d = new Date(); $('#cStart').value = pad(d.getHours()) + ':' + pad(d.getMinutes()); $('#cDate').value = isoDate(d); }
@@ -1528,7 +1614,8 @@ function splitsHTML(stMin){
     else if (c[i]){
       const t = new Date(c[i]), dl = s.raceMin != null ? (c[i] - live.startedAt) / 60000 - s.raceMin : null;
       act = fmtClock(t.getHours() * 60 + t.getMinutes()) + (dl != null ? ` <span class="q">${Math.abs(dl) < 1 ? '±0' : (dl > 0 ? '+' : '−') + Math.round(Math.abs(dl))}</span>` : '');
-    } else if (i === nextI) act = `<button class="btn ghost sm" data-act="mark" data-i="${i}">I’m here</button>`;
+    } else if (live.finishedAt) act = '';
+    else if (i === nextI) act = `<button class="btn ghost sm" data-act="mark" data-i="${i}">I’m here</button>`;
     else if (F && F.at[i] != null) act = `<span class="q">about ${fmtClock(stMin + F.at[i])}</span>`;
     return `<li><span class="blaze${s.kind === 'water' ? ' water' : ''}">${i + 1}</span><span class="nm">${esc(s.name)}</span><span class="pl">${plan}</span><span class="ac">${act}</span></li>`;
   }).join('');
@@ -1851,8 +1938,8 @@ let rz;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!$('#course').hidden && route()){ drawProfile(); drawOutline(); } }, 150); });
 renderHeader();
 setInterval(tick, 1000);
-if (live) keepAwake();
-if (live && race.gpsOn !== false && route()) gpsStart();
+if (live && !live.finishedAt) keepAwake();
+if (live && !live.finishedAt && race.gpsOn !== false && route()) gpsStart();
 showTab(live ? 'race' : (race.stops.length || race.route ? 'course' : 'setup'));
 })();
 </script>
